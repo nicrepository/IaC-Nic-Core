@@ -1,0 +1,46 @@
+---
+# Configuração geral para TODOS
+- name: Preparar infraestrutura base
+  hosts: all
+  become: true
+  vars_files:
+    - vars/secrets.yml
+  roles:
+    - common
+    - security
+
+# Configuração para o SIEM Wazuh
+- name: Configurar Wazuh SIEM
+  hosts: siem
+  become: true
+  roles:
+    - wazuh
+  tasks:
+    - name: Liberar portas do Wazuh no Firewall
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - '443'   # Dashboard
+        - '1514'  # Agentes (Eventos)
+        - '1515'  # Agentes (Registro)
+        - '55000' # API
+
+# Configuração específica de apps
+- name: Configurar servidor de aplicações
+  hosts: apps
+  become: true
+  roles:
+    - docker
+    - apps_core
+  tasks: 
+    - name: Liberar portas de apps no Firewall
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - '80'
+        - '446'
+        - '9443' # Portainer (HTTPS)

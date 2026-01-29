@@ -1,0 +1,31 @@
+---
+- name: apt update
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Instalar pacotes essenciais
+  apt:
+    name:
+      - curl
+      - wget
+      - git
+      - htop
+      - vim
+      - net-tools
+      - qemu-guest-agent
+      - tar
+      - unzip
+      - software-properties-common
+    state: present
+
+- name: Configurar timezone para São Paulo
+  timezone:
+    name: America/Sao_Paulo
+
+- name: Ajustar vm.max_map_count (Vital para ElasticSearch/Wazuh)
+  sysctl:
+    name: vm.max_map_count
+    value: '262144'
+    state: present
+    reload: yes

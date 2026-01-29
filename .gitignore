@@ -1,0 +1,36 @@
+# --- Terraform ---
+# Pastas locais de plugins e estado
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Arquivos de Variáveis Secretas (NUNCA SUBIR ISSO)
+*.tfvars
+*.tfvars.json
+credentials.auto.tfvars
+
+# Logs de Crash
+crash.log
+override.tf
+override.tf.json
+.terraformrc
+terraform.rc
+
+# --- Ansible ---
+# Arquivos de retry se o playbook falhar
+*.retry
+# O inventário é gerado dinamicamente pelo Terraform, não subimos o local
+ansible/inventory.ini
+
+# --- SSH Keys e Segredos ---
+# Bloqueia qualquer chave privada que esteja na pasta (por segurança)
+*.pem
+id_rsa
+id_rsa.pub
+
+# --- OS & Editores ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

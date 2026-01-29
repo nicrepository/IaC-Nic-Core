@@ -1,0 +1,22 @@
+---
+- name: Criar diretório base para Apps
+  file:
+    path: /opt/nic-labs/core
+    state: directory
+    owner: nic-core
+    group: docker
+    mode: '0755'
+
+- name: Gerar docker-compose.yml a partir do Template
+  template:
+    src: docker-compose.yml.j2
+    dest: /opt/nic-labs/core/docker-compose.yml
+    owner: nic-core
+    group: docker
+    mode: '0640'
+  notify: Restart Containers
+
+- name: Subir Containers (Docker Compose)
+  community.docker.docker_compose_v2:
+    project_src: /opt/nic-labs/core
+    state: present

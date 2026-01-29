@@ -1,0 +1,19 @@
+---
+- name: Baixar script de instalação Wazuh (All-in-One)
+  get_url:
+    url: https://packages.wazuh.com/4.9/wazuh-install.sh
+    dest: /tmp/wazuh-install.sh
+    mode: '0744'
+
+- name: Executar instalação do Wazuh (Pode demorar ~10 min)
+  shell: bash /tmp/wazuh-install.sh -a
+  args:
+    creates: /var/ossec/bin/wazuh-control
+  register: wazuh_install_output
+
+- name: Salvar as senhas geradas (Importante!)
+  fetch:
+    src: wazuh-install-files.tar
+    dest: ./wazuh-passwords
+    flat: yes
+  when: wazuh_install_output.changed

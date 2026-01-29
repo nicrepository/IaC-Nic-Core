@@ -1,0 +1,30 @@
+---
+- name: Instalar UFW (Uncomplicated Firewall)
+  apt:
+    name: ufw
+    state: present
+
+- name: Liberar porta SSH antes de ativar o Firewall!
+  ufw:
+    rule: allow
+    port: '22'
+    proto: tcp
+
+- name: Ativar o Firewall e negar tudo o resto
+  ufw:
+    state: enabled
+    policy: deny
+
+- name: Endurecer o SSH (Hardening)
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^PermitRootLogin'
+    line: 'PermitRootLogin no'
+  notify: Reiniciar SSH
+
+- name: Desabilitar autenticação por senha (só chave SSH)
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+  notify: Reiniciar SSH
