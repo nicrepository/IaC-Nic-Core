@@ -1,7 +1,7 @@
 ---
 # Configuração geral para TODOS
 - name: Preparar infraestrutura base
-  hosts: all
+  hosts: siem:apps
   become: true
   vars_files:
     - vars/secrets.yml
