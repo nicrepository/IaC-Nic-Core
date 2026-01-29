@@ -19,7 +19,7 @@ resource "proxmox_vm_qemu" "srv_pfsense" {
     numa = true
 
     # --- PERFORMANCE MEMÓRIA ---
-    memory = 12288
+    memory = 20480
     balloon = 0
 
     # --- ARMAZENAMENTO ---
