@@ -25,7 +25,6 @@
         - '443'   # Dashboard
         - '1514'  # Agentes (Eventos)
         - '1515'  # Agentes (Registro)
-        - '55000' # API
 
 # Configuração específica de apps
 - name: Configurar servidor de aplicações
