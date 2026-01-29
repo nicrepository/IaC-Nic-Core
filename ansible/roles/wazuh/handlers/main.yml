@@ -1,0 +1,6 @@
+---
+- name: Reiniciar Indexer
+  service:
+    name: wazuh-indexer
+    state: restarted
+    daemon_reload: yes
