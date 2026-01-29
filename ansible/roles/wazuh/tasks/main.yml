@@ -17,3 +17,33 @@
     dest: ./wazuh-passwords
     flat: yes
   when: wazuh_install_output.changed
+
+- name: Configurar Heap Size do Indexer para 16GB (50% da RAM)
+  lineinfile:
+    path: /etc/wazuh-indexer/jvm.options
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+  loop:
+    - { regexp: '^-Xms', line: '-Xms16g' }
+    - { regexp: '^-Xmx', line: '-Xmx16g' }
+  notify: Reiniciar Indexer
+
+- name: Impedir Swap de Memória (Performance Crítica)
+  lineinfile:
+    path: /etc/wazuh-indexer/opensearch.yml
+    line: 'bootstrap.memory_lock: true'
+  notify: Reiniciar Indexer
+
+- name: Permitir Memlock ilimitado no Systemd
+  community.general.ini_file:
+    path: /usr/lib/systemd/system/wazuh-indexer.service
+    section: Service
+    option: LimitMEMLOCK
+    value: infinity
+  notify: Reiniciar Indexer
+
+- name: Desabilitar repositórios do Wazuh (Evitar update acidental)
+  replace:
+    path: /etc/apt/sources.list.d/wazuh.list
+    regexp: '^deb'
+    replace: '#deb'
