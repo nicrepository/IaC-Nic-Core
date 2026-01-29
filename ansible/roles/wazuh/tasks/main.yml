@@ -5,15 +5,16 @@
     dest: /tmp/wazuh-install.sh
     mode: '0744'
 
-- name: Executar instalação do Wazuh (Pode demorar ~10 min)
+- name: Executar instalação do Wazuh
   shell: bash /tmp/wazuh-install.sh -a
   args:
+    chdir: /tmp
     creates: /var/ossec/bin/wazuh-control
   register: wazuh_install_output
 
-- name: Salvar as senhas geradas (Importante!)
+- name: Salvar as senhas geradas
   fetch:
-    src: wazuh-install-files.tar
+    src: /tmp/wazuh-install-files.tar
     dest: ./wazuh-passwords
     flat: yes
   when: wazuh_install_output.changed
@@ -34,12 +35,18 @@
     line: 'bootstrap.memory_lock: true'
   notify: Reiniciar Indexer
 
-- name: Permitir Memlock ilimitado no Systemd
-  community.general.ini_file:
-    path: /usr/lib/systemd/system/wazuh-indexer.service
-    section: Service
-    option: LimitMEMLOCK
-    value: infinity
+- name: Criar diretório de override do Systemd para o Indexer
+  file:
+    path: /etc/systemd/system/wazuh-indexer.service.d
+    state: directory
+    mode: '0755'
+
+- name: Permitir Memlock ilimitado (Override seguro)
+  copy:
+    dest: /etc/systemd/system/wazuh-indexer.service.d/wazuh-indexer.conf
+    content: |
+      [Service]
+      LimitMEMLOCK=infinity
   notify: Reiniciar Indexer
 
 - name: Desabilitar repositórios do Wazuh (Evitar update acidental)
@@ -47,3 +54,12 @@
     path: /etc/apt/sources.list.d/wazuh.list
     regexp: '^deb'
     replace: '#deb'
+
+- name: Configurar Wazuh Manager (ossec.conf)
+  template:
+    src: ossec.conf.j2
+    dest: /var/ossec/etc/ossec.conf
+    owner: root
+    group: wazuh
+    mode: '0640'
+  notify: Reiniciar Manager

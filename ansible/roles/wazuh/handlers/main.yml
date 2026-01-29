@@ -4,3 +4,13 @@
     name: wazuh-indexer
     state: restarted
     daemon_reload: yes
+
+- name: Reiniciar Manager
+  service:
+    name: wazuh-manager
+    state: restarted
+
+- name: Reiniciar Dashboard
+  service:
+    name: wazuh-dashboard
+    state: restarted

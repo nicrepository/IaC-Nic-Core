@@ -41,5 +41,5 @@
         proto: tcp
       loop:
         - '80'
-        - '446'
-        - '9443' # Portainer (HTTPS)
+        - '443'
+        - '81'

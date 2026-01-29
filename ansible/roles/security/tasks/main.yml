@@ -18,13 +18,20 @@
 - name: Endurecer o SSH (Hardening)
   lineinfile:
     path: /etc/ssh/sshd_config
-    regexp: '^PermitRootLogin'
+    regexp: '^#?PermitRootLogin'
     line: 'PermitRootLogin no'
   notify: Reiniciar SSH
 
 - name: Desabilitar autenticação por senha (só chave SSH)
   lineinfile:
     path: /etc/ssh/sshd_config
-    regexp: '^PasswordAuthentication'
+    regexp: '^#?PasswordAuthentication'
     line: 'PasswordAuthentication no'
+  notify: Reiniciar SSH
+
+- name: Desabilitar Challenge Response (Garante chave pura)
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?ChallengeResponseAuthentication'
+    line: 'ChallengeResponseAuthentication no'
   notify: Reiniciar SSH

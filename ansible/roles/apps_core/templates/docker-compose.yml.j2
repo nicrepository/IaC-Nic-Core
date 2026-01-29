@@ -1,13 +1,95 @@
 version: '3.8'
 
 services:
+  # --- CONECTIVIDADE ZERO TRUST ---
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: nic_tunnel
+    restart: always
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN={{ cloudflare_tunnel_token }}
+    networks:
+      - nic_net
+
   # --- GESTÃO DE CONTAINERS ---
   portainer:
     image: portainer/portainer-ce:latest
     container_name: portainer
     restart: always
     ports:
-      - "9443:9443"
+      - "127.0.0.1:9443:9443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - portainer_data:/data
+    networks:
+      - nic_net
+
+  # --- PROXY REVERSO LOCAL ---
+  nginx_proxy:
+    image: 'jc21/nginx-proxy-manager:latest'
+    container_name: nginx_proxy
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '81:81'
+      - '443:443'
+    volumes:
+      - ./npm_data:/data
+      - ./npm_letsencrypt:/etc/letsencrypt
+    networks:
+      - nic_net
+
+  # --- GERENCIADOR DE SENHAS ---
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    restart: unless-stopped
+    volumes:
+      - vw_data:/data
+    environment:
+      - WEBSOCKET_ENABLED=true
+      - SIGNUPS_ALLOWED=false
+      # Dica: Na primeira subida, mude para 'true', crie sua conta, e depois volte para 'false'.
+    networks:
+      - nic_net
+
+  # --- BANCO DE DADOS ---
+  postgres:
+    image: postgres:15-alpine
+    container_name: nic_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: {{ db_user | default('nic_admin') }}
+      POSTGRES_PASSWORD: {{ db_password | default('MudeSuaSenha123') }}
+      POSTGRES_DB: nic_core_db
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - nic_net
+
+  # --- PLATAFORMA DE DADOS ---
+  nocodb:
+    image: nocodb/nocodb:latest
+    container_name: nocodb
+    restart: always
+    environment:
+      NC_DB: "pg://nic_postgres:5432?u={{ db_user | default('nic_admin') }}&p={{ db_password | default('MudeSuaSenha123') }}&d=nic_core_db"
+    depends_on:
+      - postgres
+    volumes:
+      - nc_data:/usr/app/data
+    networks:
+      - nic_net
+
+volumes:
+  portainer_data:
+  npm_data:
+  npm_letsencrypt:
+  vw_data:
+  pg_data:
+  nc_data:
+
+networks:
+  nic_net:
+    driver: bridge
