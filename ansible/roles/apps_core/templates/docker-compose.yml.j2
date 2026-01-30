@@ -41,16 +41,19 @@ services:
       - nic_net
 
   # --- GERENCIADOR DE SENHAS ---
-  vaultwarden:
+    nicvault:
     image: vaultwarden/server:latest
-    container_name: vaultwarden
+    container_name: nicvault
     restart: unless-stopped
-    volumes:
-      - vw_data:/data
     environment:
-      - WEBSOCKET_ENABLED=true
+      # IMPORTANTE: Mude para o domínio real agora!
+      - DOMAIN=https://vault.nic-labs.com
       - SIGNUPS_ALLOWED=false
-      # Dica: Na primeira subida, mude para 'true', crie sua conta, e depois volte para 'false'.
+      - INVITATIONS_ALLOWED=false
+      - ADMIN_TOKEN={{ vault_password }}
+      - WEBSOCKET_ENABLED=true
+    volumes:
+      - ./nicvault-data:/data
     networks:
       - nic_net
 
