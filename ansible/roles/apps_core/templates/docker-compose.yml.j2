@@ -41,19 +41,18 @@ services:
       - nic_net
 
   # --- GERENCIADOR DE SENHAS ---
-    nicvault:
+  nicvault:
     image: vaultwarden/server:latest
     container_name: nicvault
     restart: unless-stopped
     environment:
-      # IMPORTANTE: Mude para o domínio real agora!
       - DOMAIN=https://vault.nic-labs.com
       - SIGNUPS_ALLOWED=false
       - INVITATIONS_ALLOWED=false
       - ADMIN_TOKEN={{ vault_password }}
       - WEBSOCKET_ENABLED=true
     volumes:
-      - ./nicvault-data:/data
+      - ./vw_data:/data
     networks:
       - nic_net
 
