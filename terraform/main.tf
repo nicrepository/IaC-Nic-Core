@@ -13,7 +13,7 @@ resource "proxmox_vm_qemu" "srv_pfsense" {
     os_type = "other"
 
     # --- PERFORMANCE CPU ---
-    cores = 5
+    cores = 4
     sockets = 1
     cpu = "host"
     numa = true
@@ -101,7 +101,7 @@ resource "proxmox_vm_qemu" "srv_wazuh" {
 	scsihw = "virtio-scsi-single"
 	disk {
 		slot = 0
-		size = "200G"
+		size = "350G"
 		type = "scsi"
 		storage = "local-zfs"
 		iothread = 1
@@ -137,20 +137,20 @@ resource "proxmox_vm_qemu" "srv_apps" {
 	os_type = "cloud-init"
 
 	# --- PERFORMACE CPU ---
-	cores = 6
+	cores = 8
 	sockets = 1
 	cpu = "host"
 	numa = true
 
 	# --- PERFORMACE MEMORIA ---
-	memory = 32768
+	memory = 40960
 	balloon = 0
 
 	# --- STORAGE NVMe ZFS ---
 	scsihw = "virtio-scsi-single"
 	disk {
 		slot = 0
-		size = "200G"
+		size = "400G"
 		type = "scsi"
 		storage = "local-zfs"
 		iothread = 1
@@ -158,11 +158,13 @@ resource "proxmox_vm_qemu" "srv_apps" {
 		ssd = 1
 	}
 
-	# Passthrough da RTX 4060 Ti
+	# PASSTHROUGH GPU
     hostpci {
         pci = "0000:01:00"  # <--- Confirme este ID com 'lspci' no Host
         rombar = 1
         xrom = 1
+		# Adicione isso se tiver problemas:
+		# pcie = 1
     }
 
 	# --- REDE & SEGURANÇA
