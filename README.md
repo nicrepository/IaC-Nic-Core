@@ -8,9 +8,9 @@ O projeto é desenhado para rodar em hardware Bare Metal (Ryzen 9 5900X) com Pro
 
 | VM ID | Hostname | Função | Specs (vCPU/RAM) | IP Fixo |
 | :--- | :--- | :--- | :--- | :--- |
-| **100** | `srv-pfsense-01` | Firewall, Gateway & VLANs | 5 vCPU / 20GB | 192.168.50.1 |
+| **100** | `srv-pfsense-01` | Firewall, Gateway & VLANs | 4 vCPU / 20GB | 192.168.50.1 |
 | **105** | `srv-wazuh-01` | SIEM, Logs & Security | 10 vCPU / 32GB | 192.168.50.10 |
-| **106** | `srv-apps-01` | Docker, Vaultwarden & Tools | 6 vCPU / 32GB | 192.168.50.11 |
+| **106** | `srv-apps-01` | Docker, Vaultwarden & Tools | 8 vCPU / 40GB | 192.168.50.11 |
 
 **Tecnologias:**
 * **Hypervisor:** Proxmox VE (KVM/LXC)
