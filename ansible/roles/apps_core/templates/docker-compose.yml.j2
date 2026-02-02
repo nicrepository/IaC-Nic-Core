@@ -83,6 +83,42 @@ services:
       - nc_data:/usr/app/data
     networks:
       - nic_net
+  
+  # --- INTELIGENCIA ARTIFICIAL (Ollama + GPU) ---
+  ollama:
+    image: ollama/ollama:latest
+    container_name: nic_ollama
+    restart: always
+    tty: true
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - nic_net
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+  
+  # --- INTERFACE DE CHAT ---
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: nic_chat
+    restart: always
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+    volumes:
+      - openwebui_data:/app/backend/data
+    ports:
+      - "3000:8080"
+    depends_on:
+      - ollama
+    networks:
+      - nic_net
 
 volumes:
   portainer_data:
@@ -91,6 +127,8 @@ volumes:
   vw_data:
   pg_data:
   nc_data:
+  ollama_data:
+  openwebui_data:
 
 networks:
   nic_net:

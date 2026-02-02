@@ -158,6 +158,13 @@ resource "proxmox_vm_qemu" "srv_apps" {
 		ssd = 1
 	}
 
+	# Passthrough da RTX 4060 Ti
+    hostpci {
+        pci = "0000:01:00"  # <--- Confirme este ID com 'lspci' no Host
+        rombar = 1
+        xrom = 1
+    }
+
 	# --- REDE & SEGURANÇA
 	network {
 		model = "virtio"
