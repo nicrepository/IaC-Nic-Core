@@ -34,9 +34,27 @@ services:
       - '80:80'
       - '81:81'
       - '443:443'
+    environment:
+      - DISABLE_IPV6=true
     volumes:
       - ./npm_data:/data
       - ./npm_letsencrypt:/etc/letsencrypt
+      - ./npm_data/logs:/data/logs
+    networks:
+      - nic_net
+  
+  # --- WAF COMPORTAMENTAL (CrowdSec) ---
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: nic_waf
+    restart: always
+    environment:
+      - COLLECTIONS=crowdsecurity/nginx-proxy-manager crowdsecurity/http-cve crowdsecurity/whitelist-good-actors
+      - GID=1000
+    volumes:
+      - crowdsec_db:/var/lib/crowdsec/data
+      - crowdsec_config:/etc/crowdsec
+      - ./npm_data/logs:/var/log/npm:ro
     networks:
       - nic_net
 
@@ -129,6 +147,8 @@ volumes:
   nc_data:
   ollama_data:
   openwebui_data:
+  crowdsec_db:
+  crowdsec_config:
 
 networks:
   nic_net:
