@@ -1,22 +1,36 @@
 version: '3.8'
 
+# --- CONFIGURAÇÃO DE LOGS (Evita disco cheio) ---
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # --- CONECTIVIDADE ZERO TRUST ---
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2024.2.1
     container_name: nic_tunnel
-    restart: always
+    restart: unless-stopped
     command: tunnel run
     environment:
       - TUNNEL_TOKEN={{ cloudflare_tunnel_token }}
     networks:
       - nic_net
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   # --- GESTÃO DE CONTAINERS ---
   portainer:
-    image: portainer/portainer-ce:latest
+    image: portainer/portainer-ce:2.19.4
     container_name: portainer
-    restart: always
+    restart: unless-stopped
     ports:
       - "127.0.0.1:9443:9443"
     volumes:
@@ -24,10 +38,11 @@ services:
       - portainer_data:/data
     networks:
       - nic_net
+    logging: *default-logging
 
-  # --- PROXY REVERSO LOCAL ---
+  # --- PROXY REVERSO & SSL ---
   nginx_proxy:
-    image: 'jc21/nginx-proxy-manager:latest'
+    image: 'jc21/nginx-proxy-manager:2.11.0'
     container_name: nginx_proxy
     restart: unless-stopped
     ports:
@@ -36,31 +51,40 @@ services:
       - '443:443'
     environment:
       - DISABLE_IPV6=true
+      - X_FRAME_OPTIONS="SAMEORIGIN"
     volumes:
       - ./npm_data:/data
       - ./npm_letsencrypt:/etc/letsencrypt
-      - ./npm_data/logs:/data/logs
+      - ./npm_logs:/data/logs
     networks:
       - nic_net
-  
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
   # --- WAF COMPORTAMENTAL (CrowdSec) ---
   crowdsec:
-    image: crowdsecurity/crowdsec:latest
+    image: crowdsecurity/crowdsec:v1.6.0
     container_name: nic_waf
-    restart: always
+    restart: unless-stopped
     environment:
-      - COLLECTIONS=crowdsecurity/nginx-proxy-manager crowdsecurity/http-cve crowdsecurity/whitelist-good-actors
+      - COLLECTIONS=crowdsecurity/nginx-proxy-manager crowdsecurity/http-cve crowdsecurity/whitelist-good-actors crowdsecurity/vaultwarden
       - GID=1000
     volumes:
       - crowdsec_db:/var/lib/crowdsec/data
       - crowdsec_config:/etc/crowdsec
-      - ./npm_data/logs:/var/log/npm:ro
+      - ./npm_logs:/var/log/npm:ro
     networks:
       - nic_net
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
 
   # --- GERENCIADOR DE SENHAS ---
   nicvault:
-    image: vaultwarden/server:latest
+    image: vaultwarden/server:1.30.5-alpine
     container_name: nicvault
     restart: unless-stopped
     environment:
@@ -69,16 +93,23 @@ services:
       - INVITATIONS_ALLOWED=false
       - ADMIN_TOKEN={{ vault_password }}
       - WEBSOCKET_ENABLED=true
+      - ROCKET_WORKERS=10
     volumes:
       - ./vw_data:/data
     networks:
       - nic_net
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   # --- BANCO DE DADOS ---
   postgres:
-    image: postgres:15-alpine
+    image: postgres:15.5-alpine
     container_name: nic_postgres
-    restart: always
+    restart: unless-stopped
+    command: postgres -c shared_buffers=256MB -c effective_cache_size=768MB -c maintenance_work_mem=64MB -c checkpoint_completion_target=0.9 -c wal_buffers=16MB -c default_statistics_target=100 -c random_page_cost=1.1 -c effective_io_concurrency=200
     environment:
       POSTGRES_USER: {{ db_user | default('nic_admin') }}
       POSTGRES_PASSWORD: {{ db_password | default('MudeSuaSenha123') }}
@@ -87,12 +118,17 @@ services:
       - pg_data:/var/lib/postgresql/data
     networks:
       - nic_net
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 
   # --- PLATAFORMA DE DADOS ---
   nocodb:
-    image: nocodb/nocodb:latest
+    image: nocodb/nocodb:0.204.3
     container_name: nocodb
-    restart: always
+    restart: unless-stopped
     environment:
       NC_DB: "pg://nic_postgres:5432?u={{ db_user | default('nic_admin') }}&p={{ db_password | default('MudeSuaSenha123') }}&d=nic_core_db"
     depends_on:
@@ -101,12 +137,13 @@ services:
       - nc_data:/usr/app/data
     networks:
       - nic_net
-  
+    logging: *default-logging
+
   # --- INTELIGENCIA ARTIFICIAL (Ollama + GPU) ---
   ollama:
     image: ollama/ollama:latest
     container_name: nic_ollama
-    restart: always
+    restart: unless-stopped
     tty: true
     ports:
       - "11434:11434"
@@ -121,14 +158,14 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-  
+
   # --- INTERFACE DE CHAT ---
   openwebui:
     image: ghcr.io/open-webui/open-webui:main
     container_name: nic_chat
-    restart: always
+    restart: unless-stopped
     environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_BASE_URL=http://nic_ollama:11434
     volumes:
       - openwebui_data:/app/backend/data
     ports:
@@ -137,11 +174,13 @@ services:
       - ollama
     networks:
       - nic_net
+    logging: *default-logging
 
 volumes:
   portainer_data:
   npm_data:
   npm_letsencrypt:
+  npm_logs: # Novo volume para Logs do Nginx
   vw_data:
   pg_data:
   nc_data:
