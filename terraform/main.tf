@@ -4,124 +4,137 @@
 
 resource "proxmox_vm_qemu" "srv_pfsense" {
     name = "srv-pfsense-01"
-    target_node = var.target_node
+    target_node = "pve-niclabs"
     vmid = 100
-    
-    iso = "local:iso/pfSense-CE-2.7.2-RELEASE-amd64.iso"
-    
-    agent = 0
+	description = "Firewall Principal - Suricata Enabled"
+
+	# --- BOOT & SISTEMA ---
+	onboot = true
+	startup = "order=1,up=30"
+    agent   = 0
     os_type = "other"
-
-    # --- PERFORMANCE CPU ---
-    cores = 4
-    sockets = 1
-    cpu = "host"
-    numa = true
-
-    # --- PERFORMANCE MEMÓRIA ---
+	bios = "seabios"
+	
+	# --- PERFORMANCE CPU ---
+	cpu {
+        cores = 4
+        sockets = 1
+        type = "host"
+        numa = true
+		units = 1000
+    }
+    
+	# --- PERFORMANCE MEMÓRIA ---
     memory = 20480
     balloon = 0
 
-    # --- ARMAZENAMENTO ---
-    scsihw = "virtio-scsi-single"
-    disk {
-        slot = 0
-        size = "32G"
-        type = "scsi"
+	# --- ARMAZENAMENTO ---
+	scsihw = "virtio-scsi-single"
+	boot = "order=scsi0;ide2"
+
+	disk {
+        type = "disk"
+        slot = "scsi0"
+        size = "64G"
         storage = "local-zfs"
-        iothread = 1
-        discard = "on"
-        ssd = 1
+        iothread = true
+        discard = true
     }
 
-    # --- REDE (4 Interfaces Físicas) ---
+	# --- INSTALADOR ISO ---
+    disk {
+        type = "cdrom"
+        slot = "ide2"
+        iso = "local:iso/netgate-installer-v1.1-RELEASE-amd64.iso"
+    }
     
+
+    # --- REDE DE ALTA PERFORMANCE (Multiqueue Ativo) ---
+
     # WAN VIVO
     network {
         id = 0
         model = "virtio"
         bridge = "vmbr1"
         firewall = false
+		queues = 4
     }
 
     # WAN VALENET
     network {
-        id  = 1
+        id = 1
         model = "virtio"
         bridge = "vmbr2"
         firewall = false
+		queues = 4
     }
 
-    # LAN TRUNK (VLANs)
+    # LAN TRUNK
     network {
-        id  = 2
+        id = 2
         model = "virtio"
         bridge = "vmbr3"
         firewall = false
+		queues = 4
     }
 
-    # LAN LAB
+    # LAN LAB/VLAN
     network {
         id = 3
         model = "virtio"
         bridge = "vmbr4"
         firewall = false
+		queues = 4
     }
-
-    boot = "order=scsi0;ide2"
 }
 
 
 # ===============================================================
-# VM 1: WAZUH SIEM (Monitoramento & Segurança)
+# VM 1: WAZUH SIEM
 # ===============================================================
 
 resource "proxmox_vm_qemu" "srv_wazuh" {
-	name = "srv-wazuh-01"
-	target_node = var.target_node
-	vmid = 105
-	clone = "ubuntu-2404-template"
-	
-	# Agente QEMU: Permite ao Proxmox ver IP e RAM da VM
-	agent = 1
-	os_type = "cloud-init"
+    name        = "srv-wazuh-01"
+    target_node = "pve-niclabs"
+    vmid        = 105
+    clone       = "ubuntu-2404-template"
+    full_clone  = true
+    
+    agent   = 1
+    os_type = "cloud-init"
 
-	# --- PERFORMACE CPU ---
-	cores = 10
-	sockets = 1
-	cpu = "host"
-	numa = true
+    # [CORREÇÃO] Bloco CPU
+    cpu {
+        cores    = 10
+        sockets  = 1
+        type     = "host"
+        numa     = true
+    }
 
+    memory  = 32768
+    balloon = 0
 
-	# --- PERFORMACE MEMORIA ---
-	memory = 32768
-	balloon = 0
+    scsihw = "virtio-scsi-single"
 
-	# --- STORAGE NVMe ZFS ---
-	scsihw = "virtio-scsi-single"
-	disk {
-		slot = 0
-		size = "350G"
-		type = "scsi"
-		storage = "local-zfs"
-		iothread = 1
-		discard = "on"
-		ssd = 1
-	}
+    # [CORREÇÃO CRÍTICA] Disco Rígido
+    disk {
+        type     = "disk"      # <--- MUDOU AQUI
+        slot     = "scsi0"
+        size     = "100G"
+        storage  = "local-zfs"
+        iothread = true
+        discard  = true
+    }
 
-	# --- REDE & SEGURANÇA
-	network {
-		model = "virtio"
-		bridge = "vmbr3"
-		tag = 50
-	}
+    network {
+        id     = 0
+        model  = "virtio"
+        bridge = "vmbr0"
+    }
 
-	# --- CLOUD-INIT ---
-	ciuser = "nic-core"
-	ipconfig0 = "ip=192.168.50.10/24,gw=192.168.50.1"
-	sshkeys = <<EOF
-	${join("\n", var.ssh_public_keys)}
-	EOF
+    ciuser    = "nic-core"
+    ipconfig0 = "ip=192.168.15.200/24,gw=192.168.15.1"
+    sshkeys   = join("\n", var.ssh_public_keys)
 }
 
 # ===============================================================
@@ -129,55 +142,48 @@ resource "proxmox_vm_qemu" "srv_wazuh" {
 # ===============================================================
 
 resource "proxmox_vm_qemu" "srv_apps" {
-	name = "srv-apps-01"
-	target_node = var.target_node
-	vmid = 106
-	clone = "ubuntu-2404-template"
-	agent = 1
-	os_type = "cloud-init"
+    name        = "srv-apps-01"
+    target_node = "pve-niclabs"
+    vmid        = 106
+    clone       = "ubuntu-2404-template"
+    full_clone  = true
+    agent       = 1
+    os_type     = "cloud-init"
 
-	# --- PERFORMACE CPU ---
-	cores = 8
-	sockets = 1
-	cpu = "host"
-	numa = true
-
-	# --- PERFORMACE MEMORIA ---
-	memory = 40960
-	balloon = 0
-
-	# --- STORAGE NVMe ZFS ---
-	scsihw = "virtio-scsi-single"
-	disk {
-		slot = 0
-		size = "400G"
-		type = "scsi"
-		storage = "local-zfs"
-		iothread = 1
-		discard = "on"
-		ssd = 1
-	}
-
-	# PASSTHROUGH GPU
-    hostpci {
-        pci = "0000:01:00"  # <--- Confirme este ID com 'lspci' no Host
-        rombar = 1
-        xrom = 1
-		# Adicione isso se tiver problemas:
-		# pcie = 1
+    # [CORREÇÃO] Bloco CPU
+    cpu {
+        cores    = 8
+        sockets  = 1
+        type     = "host"
+        numa     = true
     }
 
-	# --- REDE & SEGURANÇA
-	network {
-		model = "virtio"
-		bridge = "vmbr3"
-		tag = 50
-	}
+    memory  = 40960
+    balloon = 0
 
-	# --- CLOUD-INIT ---
-	ciuser = "nic-core"
-	ipconfig0 = "ip=192.168.50.11/24,gw=192.168.50.1"
-	sshkeys = <<EOF
-	${join("\n", var.ssh_public_keys)}
-	EOF
+    scsihw = "virtio-scsi-single"
+
+    disk {
+        type     = "disk"
+        slot     = "scsi0"
+        size     = "50G"
+        storage  = "local-zfs"
+        iothread = true
+        discard  = true
+    }
+
+    #hostpci {
+        #host   = "0000:08:00"
+        #rombar = 1
+    #}
+
+    network {
+        id     = 0
+        model  = "virtio"
+        bridge = "vmbr0"
+    }
+
+    ciuser    = "nic-core"
+    ipconfig0 = "ip=192.168.1.31/24,gw=192.168.1.1"
+    sshkeys   = join("\n", var.ssh_public_keys)
 }
