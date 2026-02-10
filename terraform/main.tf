@@ -144,11 +144,11 @@ resource "proxmox_vm_qemu" "srv_wazuh" {
 	scsihw = "virtio-scsi-single"
 
 
-	# DISCO 2: DADOS (DATA /var/lib/wazuh-indexer)
+	# DISCO 1: Sistema
     disk {
         type = "disk"
-        slot = "scsi1"
-        size = "200G"
+        slot = "scsi0"
+        size = "300G"
         storage = "local-zfs"
         iothread = true
         discard = true
@@ -164,7 +164,7 @@ resource "proxmox_vm_qemu" "srv_wazuh" {
 
 	# --- CLOUD-INIT ---
     ciuser = "nic-core"
-    ipconfig0 = "ip=10.10.10.10/24,gw=10.10.10.1"
+    ipconfig0 = "ip=10.10.10.3/24,gw=10.10.10.1"
     sshkeys = join("\n", var.ssh_public_keys)
 }
 
@@ -210,10 +210,10 @@ resource "proxmox_vm_qemu" "srv_apps" {
 	# --- ARMAZENAMENTO ---
     scsihw = "virtio-scsi-single"
 
-	# DISCO 2: DADOS & AI MODELS
+	# DISCO 1: Sistema
     disk {
         type = "disk"
-        slot = "scsi1"
+        slot = "scsi0"
         size = "350G"
         storage = "local-zfs"
         iothread = true
@@ -243,6 +243,6 @@ resource "proxmox_vm_qemu" "srv_apps" {
 
 	# --- CLOUD-INIT ---
     ciuser    = "nic-core"
-    ipconfig0 = "ip=10.10.10.11/24,gw=10.10.10.1"
+    ipconfig0 = "ip=10.10.10.4/24,gw=10.10.10.1"
     sshkeys   = join("\n", var.ssh_public_keys)
 }
