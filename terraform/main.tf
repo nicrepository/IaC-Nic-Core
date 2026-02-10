@@ -95,6 +95,15 @@ resource "proxmox_vm_qemu" "srv_pfsense" {
         firewall = false
 		queues = 4
     }
+
+    # LAN GERENCIA
+    network {
+        id       = 4
+        model    = "virtio"
+        bridge   = "vmbr0"
+        firewall = false
+        queues   = 4
+    }
 }
 
 
