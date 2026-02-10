@@ -162,6 +162,11 @@ resource "proxmox_vm_qemu" "srv_wazuh" {
 		firewall = false
     }
 
+    # --- VGA ---
+    vga {
+        type = "std"
+    }
+
 	# --- CLOUD-INIT ---
     ciuser = "nic-core"
     ipconfig0 = "ip=10.10.10.3/24,gw=10.10.10.1"
@@ -239,6 +244,11 @@ resource "proxmox_vm_qemu" "srv_apps" {
         model = "virtio"
         bridge = "vmbr0"
 		firewall = false
+    }
+
+    # --- VGA ---
+    vga {
+        type = "std"
     }
 
 	# --- CLOUD-INIT ---
