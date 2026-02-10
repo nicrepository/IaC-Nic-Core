@@ -9,7 +9,6 @@ resource "proxmox_vm_qemu" "srv_pfsense" {
     name = "srv-pfsense-01"
     target_node = "pve-niclabs"
     vmid = 100
-    force_create = true
 	description = "Firewall Principal - Suricata Enabled"
 
 	# --- SISTEMA ---
@@ -107,7 +106,6 @@ resource "proxmox_vm_qemu" "srv_wazuh" {
     name = "srv-wazuh-01"
     target_node = "pve-niclabs"
     vmid = 105
-    force_create = true
 	description = "SIEM & XDR - OpenSearch Database"
 
 	# --- CLONAGEM TEMPLATE ---
@@ -150,9 +148,6 @@ resource "proxmox_vm_qemu" "srv_wazuh" {
         type = "disk"
         slot = "scsi0"
         size = "50G"
-        storage = "local-zfs"
-        iothread = true
-        discard = true
     }
 
 	# DISCO 2: DADOS (DATA /var/lib/wazuh-indexer)
@@ -187,7 +182,6 @@ resource "proxmox_vm_qemu" "srv_apps" {
     name = "srv-apps-01"
     target_node = "pve-niclabs"
     vmid = 106
-    force_create = true
 	description = "App server"
 
     # --- CLONAGEM TEMPLATE ---
