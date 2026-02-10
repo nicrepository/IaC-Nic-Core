@@ -11,12 +11,18 @@ resource "proxmox_vm_qemu" "srv_pfsense" {
     vmid = 100
 	description = "Firewall Principal - Suricata Enabled"
 
-	# --- BOOT & SISTEMA ---
-	onboot = true
-	startup = "order=1,up=30"
+	# --- SISTEMA ---
     agent   = 0
     os_type = "other"
 	bios = "seabios"
+
+	# --- BOOT ---
+	start_at_node_boot = true
+	startup_shutdown {
+		order = 1
+		startup_delay = 30
+		shutdown_timeout = 0
+	}
 	
 	# --- PERFORMANCE CPU ---
 	cpu {
@@ -106,12 +112,18 @@ resource "proxmox_vm_qemu" "srv_wazuh" {
     clone = "ubuntu-2404-template"
     full_clone = true
     
-	# --- BOOT & SISTEMA ---
-	onboot = true
-	startup = "order=2,up=60"
+	# --- SISTEMA ---
     agent = 1
     os_type = "cloud-init"
 	bios = "seabios"
+
+	# --- BOOT ---
+	start_at_node_boot = true
+	startup_shutdown {
+		order = 2
+		startup_delay = 60
+		shutdown_timeout = 0
+	}
 
 	# --- PERFORMANCE CPU ---
     cpu {
@@ -119,7 +131,9 @@ resource "proxmox_vm_qemu" "srv_wazuh" {
         sockets = 1
         type = "host"
         numa = true
-		flags = "+aes"
+		flags {
+			aes = "on"
+		}
     }
 
 	# --- PERFORMANCE MEMÓRIA ---
@@ -177,13 +191,18 @@ resource "proxmox_vm_qemu" "srv_apps" {
     clone = "ubuntu-2404-template"
     full_clone = true
 
-    # --- BOOT & SISTEMA ---
-	onboot = true
-	startup = "order=3,up=60"
+    # --- SISTEMA ---
     agent = 1
     os_type = "cloud-init"
 	bios = "seabios"
 
+	# --- BOOT ---
+	start_at_node_boot = true
+	startup_shutdown {
+		order = 3
+		startup_delay = 60
+		shutdown_timeout = 0
+	}
 
     # --- PERFORMANCE CPU ---
     cpu {
