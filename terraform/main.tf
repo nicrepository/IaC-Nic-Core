@@ -243,6 +243,7 @@ resource "proxmox_vm_qemu" "srv_apps" {
     }
 
 	# --- GPU PASSTHROUGH ---
+    machine = "q35"
 	pcis {
 		pci0 {
 			mapping {
