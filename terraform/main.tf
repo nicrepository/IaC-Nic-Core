@@ -1,6 +1,9 @@
 # ===============================================================
 # VM 0: NETWORK CORE (pfSense Firewall)
 # ===============================================================
+# EXECUTAR ANTES: 
+# echo 'hw.vtnet.mq_disable=0' >> /boot/loader.conf.local
+# echo 'hw.vtnet.max_virtqueues=4' >> /boot/loader.conf.local
 
 resource "proxmox_vm_qemu" "srv_pfsense" {
     name = "srv-pfsense-01"
@@ -35,7 +38,7 @@ resource "proxmox_vm_qemu" "srv_pfsense" {
 	disk {
         type = "disk"
         slot = "scsi0"
-        size = "64G"
+        size = "50G"
         storage = "local-zfs"
         iothread = true
         discard = true
@@ -94,47 +97,70 @@ resource "proxmox_vm_qemu" "srv_pfsense" {
 # ===============================================================
 
 resource "proxmox_vm_qemu" "srv_wazuh" {
-    name        = "srv-wazuh-01"
+    name = "srv-wazuh-01"
     target_node = "pve-niclabs"
-    vmid        = 105
-    clone       = "ubuntu-2404-template"
-    full_clone  = true
-    
-    agent   = 1
-    os_type = "cloud-init"
+    vmid = 105
+	description = "SIEM & XDR - OpenSearch Database"
 
-    # [CORREÇÃO] Bloco CPU
+	# --- CLONAGEM TEMPLATE ---
+    clone = "ubuntu-2404-template"
+    full_clone = true
+    
+	# --- BOOT & SISTEMA ---
+	onboot = true
+	startup = "order=2,up=60"
+    agent = 1
+    os_type = "cloud-init"
+	bios = "seabios"
+
+	# --- PERFORMANCE CPU ---
     cpu {
-        cores    = 10
-        sockets  = 1
-        type     = "host"
-        numa     = true
+        cores = 10
+        sockets = 1
+        type = "host"
+        numa = true
+		flags = "+aes"
     }
 
-    memory  = 32768
+	# --- PERFORMANCE MEMÓRIA ---
+    memory = 32768
     balloon = 0
 
-    scsihw = "virtio-scsi-single"
+	# --- ARMAZENAMENTO ---
+	scsihw = "virtio-scsi-single"
 
-    # [CORREÇÃO CRÍTICA] Disco Rígido
+	# DISCO 1: OS
     disk {
-        type     = "disk"      # <--- MUDOU AQUI
-        slot     = "scsi0"
-        size     = "100G"
-        storage  = "local-zfs"
+        type = "disk"
+        slot = "scsi0"
+        size = "50G"
+        storage = "local-zfs"
         iothread = true
-        discard  = true
+        discard = true
     }
 
+	# DISCO 2: DADOS (DATA /var/lib/wazuh-indexer)
+    disk {
+        type = "disk"
+        slot = "scsi1"
+        size = "200G"
+        storage = "local-zfs"
+        iothread = true
+        discard = true
+    }
+
+	# --- REDE ---
     network {
-        id     = 0
-        model  = "virtio"
+        id = 0
+        model = "virtio"
         bridge = "vmbr0"
+		firewall = false
     }
 
-    ciuser    = "nic-core"
-    ipconfig0 = "ip=192.168.15.200/24,gw=192.168.15.1"
-    sshkeys   = join("\n", var.ssh_public_keys)
+	# --- CLOUD-INIT ---
+    ciuser = "nic-core"
+    ipconfig0 = "ip=10.10.10.10/24,gw=10.10.10.1"
+    sshkeys = join("\n", var.ssh_public_keys)
 }
 
 # ===============================================================
@@ -142,48 +168,80 @@ resource "proxmox_vm_qemu" "srv_wazuh" {
 # ===============================================================
 
 resource "proxmox_vm_qemu" "srv_apps" {
-    name        = "srv-apps-01"
+    name = "srv-apps-01"
     target_node = "pve-niclabs"
-    vmid        = 106
-    clone       = "ubuntu-2404-template"
-    full_clone  = true
-    agent       = 1
-    os_type     = "cloud-init"
+    vmid = 106
+	description = "App server"
 
-    # [CORREÇÃO] Bloco CPU
+    # --- CLONAGEM TEMPLATE ---
+    clone = "ubuntu-2404-template"
+    full_clone = true
+
+    # --- BOOT & SISTEMA ---
+	onboot = true
+	startup = "order=3,up=60"
+    agent = 1
+    os_type = "cloud-init"
+	bios = "seabios"
+
+
+    # --- PERFORMANCE CPU ---
     cpu {
-        cores    = 8
-        sockets  = 1
-        type     = "host"
-        numa     = true
+        cores = 8
+        sockets = 1
+        type = "host"
+        numa = true
     }
 
-    memory  = 40960
+	# --- PERFORMANCE MEMÓRIA ---
+    memory = 40960
     balloon = 0
 
+	# --- ARMAZENAMENTO ---
     scsihw = "virtio-scsi-single"
 
+    # DISCO 1: OS
     disk {
-        type     = "disk"
-        slot     = "scsi0"
-        size     = "50G"
-        storage  = "local-zfs"
+        type = "disk"
+        slot = "scsi0"
+        size = "50G"
+        storage = "local-zfs"
         iothread = true
-        discard  = true
+        discard = true
     }
 
-    #hostpci {
-        #host   = "0000:08:00"
-        #rombar = 1
-    #}
+	# DISCO 2: DADOS & AI MODELS
+    disk {
+        type = "disk"
+        slot = "scsi1"
+        size = "350G"
+        storage = "local-zfs"
+        iothread = true
+        discard = true
+    }
 
+	# --- GPU PASSTHROUGH ---
+	pcis {
+		pci0 {
+			mapping {
+				mapping_id = "nvidia-rtx4060"
+				pcie = true
+				rombar = true
+				primary_gpu = false
+			}
+		}
+	}
+
+	# --- REDE ---
     network {
-        id     = 0
-        model  = "virtio"
+        id = 0
+        model = "virtio"
         bridge = "vmbr0"
+		firewall = false
     }
 
+	# --- CLOUD-INIT ---
     ciuser    = "nic-core"
-    ipconfig0 = "ip=192.168.1.31/24,gw=192.168.1.1"
+    ipconfig0 = "ip=10.10.10.11/24,gw=10.10.10.1"
     sshkeys   = join("\n", var.ssh_public_keys)
 }
