@@ -143,12 +143,6 @@ resource "proxmox_vm_qemu" "srv_wazuh" {
 	# --- ARMAZENAMENTO ---
 	scsihw = "virtio-scsi-single"
 
-	# DISCO 1: OS
-    disk {
-        type = "disk"
-        slot = "scsi0"
-        size = "50G"
-    }
 
 	# DISCO 2: DADOS (DATA /var/lib/wazuh-indexer)
     disk {
@@ -215,16 +209,6 @@ resource "proxmox_vm_qemu" "srv_apps" {
 
 	# --- ARMAZENAMENTO ---
     scsihw = "virtio-scsi-single"
-
-    # DISCO 1: OS
-    disk {
-        type = "disk"
-        slot = "scsi0"
-        size = "50G"
-        storage = "local-zfs"
-        iothread = true
-        discard = true
-    }
 
 	# DISCO 2: DADOS & AI MODELS
     disk {
