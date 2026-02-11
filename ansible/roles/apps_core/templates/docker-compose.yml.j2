@@ -10,12 +10,13 @@ x-logging: &default-logging
 services:
   # --- CONECTIVIDADE ZERO TRUST ---
   cloudflared:
-    image: cloudflare/cloudflared:2024.2.1
+    image: cloudflare/cloudflared:latest
     container_name: nic_tunnel
     restart: unless-stopped
-    command: tunnel run
+    command: command: tunnel --metrics 0.0.0.0:2000 run
     environment:
       - TUNNEL_TOKEN={{ cloudflare_tunnel_token }}
+      - TUNNEL_TRANSPORT_PROTOCOL=quic
     networks:
       - nic_net
     logging: *default-logging
@@ -145,6 +146,10 @@ services:
     container_name: nic_ollama
     restart: unless-stopped
     tty: true
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h        # Mantém o modelo na VRAM (resposta instantânea)
+      - OLLAMA_NUM_PARALLEL=4        # Processa 4 usuários EXATAMENTE ao mesmo tempo
+      - OLLAMA_MAX_LOADED_MODELS=1   # Foca a VRAM em 1 modelo para evitar swap
     ports:
       - "11434:11434"
     volumes:
