@@ -1,22 +1,3 @@
-  # --- ARQUIVOS (OwnCloud Infinite Scale - OCIS) ---
-  ocis:
-    image: owncloud/ocis:latest
-    container_name: ocis
-    restart: unless-stopped
-    environment:
-      - OCIS_INSECURE=true
-      - OCIS_STORAGE_DRIVER=ocis
-    volumes:
-      - ocis_data:/var/lib/ocis
-    networks:
-      - nic_net
-    logging: *default-logging
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-    # Limite de espaço do volume para teste
-
 version: '3.8'
 
 # --- CONFIGURAÇÃO DE LOGS (Evita disco cheio) ---
@@ -32,7 +13,7 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: nic_tunnel
     restart: unless-stopped
-    command: command: tunnel --metrics 0.0.0.0:2000 run
+    command: tunnel --metrics 0.0.0.0:2000 run
     environment:
       - TUNNEL_TOKEN={{ cloudflare_tunnel_token }}
       - TUNNEL_TRANSPORT_PROTOCOL=quic
@@ -73,9 +54,9 @@ services:
       - DISABLE_IPV6=true
       - X_FRAME_OPTIONS="SAMEORIGIN"
     volumes:
-      - ./npm_data:/data
-      - ./npm_letsencrypt:/etc/letsencrypt
-      - ./npm_logs:/data/logs
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+      - npm_logs:/data/logs
     networks:
       - nic_net
     logging: *default-logging
@@ -95,7 +76,7 @@ services:
     volumes:
       - crowdsec_db:/var/lib/crowdsec/data
       - crowdsec_config:/etc/crowdsec
-      - ./npm_logs:/var/log/npm:ro
+      - npm_logs:/var/log/npm:ro
     networks:
       - nic_net
     logging: *default-logging
@@ -115,7 +96,7 @@ services:
       - WEBSOCKET_ENABLED=true
       - ROCKET_WORKERS=10
     volumes:
-      - ./vw_data:/data
+      - vw_data:/data
     networks:
       - nic_net
     logging: *default-logging
@@ -129,7 +110,19 @@ services:
     image: postgres:15.5-alpine
     container_name: nic_postgres
     restart: unless-stopped
-    command: postgres -c shared_buffers=256MB -c effective_cache_size=768MB -c maintenance_work_mem=64MB -c checkpoint_completion_target=0.9 -c wal_buffers=16MB -c default_statistics_target=100 -c random_page_cost=1.1 -c effective_io_concurrency=200 -c wal_level=replica -c max_wal_senders=10 -c hot_standby=on
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c effective_cache_size=768MB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c wal_level=replica
+      -c max_wal_senders=10
+      -c hot_standby=on
     environment:
       POSTGRES_USER: {{ db_user | default('nic_admin') }}
       POSTGRES_PASSWORD: {{ db_password | default('MudeSuaSenha123') }}
@@ -167,9 +160,9 @@ services:
     restart: unless-stopped
     tty: true
     environment:
-      - OLLAMA_KEEP_ALIVE=24h        # Mantém o modelo na VRAM (resposta instantânea)
-      - OLLAMA_NUM_PARALLEL=4        # Processa 4 usuários EXATAMENTE ao mesmo tempo
-      - OLLAMA_MAX_LOADED_MODELS=1   # Foca a VRAM em 1 modelo para evitar swap
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_NUM_PARALLEL=4
+      - OLLAMA_MAX_LOADED_MODELS=1
     ports:
       - "11434:11434"
     volumes:
@@ -205,19 +198,18 @@ services:
   mattermost:
     image: mattermost/mattermost-team-edition:latest
     container_name: mattermost
-    restart: no
+    restart: unless-stopped
     environment:
       - MM_FILESETTINGS_DRIVERNAME=amazon_s3
-      - MM_FILESETTINGS_AMAZONS3_ENDPOINT={{ r2_endpoint }}
-      - MM_FILESETTINGS_AMAZONS3_ACCESSKEYID={{ r2_access_key }}
-      - MM_FILESETTINGS_AMAZONS3_SECRETACCESSKEY={{ r2_secret_key }}
       - MM_FILESETTINGS_AMAZONS3_BUCKET={{ r2_bucket }}
       - MM_FILESETTINGS_AMAZONS3_REGION={{ r2_region | default('auto') }}
+      - MM_FILESETTINGS_AMAZONS3_ACCESSKEYID={{ r2_access_key }}
+      - MM_FILESETTINGS_AMAZONS3_SECRETACCESSKEY={{ r2_secret_key }}
+      - MM_FILESETTINGS_AMAZONS3_ENDPOINT={{ r2_endpoint }}
       - MM_FILESETTINGS_AMAZONS3_SSL=true
       - MM_FILESETTINGS_AMAZONS3_SIGNV2=false
       - MM_FILESETTINGS_AMAZONS3_S3DISABLESSL=false
       - MM_FILESETTINGS_AMAZONS3_FORCEPATHSTYLE=true
-      - MM_FILESETTINGS_AMAZONS3_ENDPOINT={{ r2_endpoint }}
       - MM_FILESETTINGS_AMAZONS3_PATHPREFIX=/
       - MM_SQLSETTINGS_DRIVERNAME=postgres
       - MM_SQLSETTINGS_DATASOURCE=postgres://{{ db_user | default('nic_admin') }}:{{ db_password | default('MudeSuaSenha123') }}@nic_postgres:5432/mattermost?sslmode=disable&connect_timeout=10
@@ -231,13 +223,35 @@ services:
         limits:
           cpus: '0.50'
           memory: 1G
-    profiles: ["failover"]
+    # profiles: ["failover"] <--- Removido para subir em PRODUÇÃO (Master)
+
+  # --- ARQUIVOS (OwnCloud Infinite Scale - OCIS) ---
+  ocis:
+    image: owncloud/ocis:latest
+    container_name: nic_drive
+    restart: unless-stopped
+    environment:
+      - OCIS_INSECURE=true
+      - OCIS_URL=https://drive.nic-labs.com
+      - PROXY_HTTP_ADDR=0.0.0.0:9200
+      - OCIS_LOG_LEVEL=info
+      - STORAGE_USERS_DRIVER=ocis
+    volumes:
+      - ocis_data:/var/lib/ocis
+      - ocis_config:/etc/ocis
+    networks:
+      - nic_net
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
 volumes:
   portainer_data:
   npm_data:
   npm_letsencrypt:
-  npm_logs: # Novo volume para Logs do Nginx
+  npm_logs:
   vw_data:
   pg_data:
   nc_data:
@@ -245,17 +259,21 @@ volumes:
   openwebui_data:
   crowdsec_db:
   crowdsec_config:
-
+  ocis_config:
+  mattermost_config:
+  mattermost_data:
+  mattermost_logs:
+  mattermost_plugins:
+  mattermost_client_plugins:
+  mattermost_bleve:
+  
+  # Volume limitado do OCIS
   ocis_data:
     driver: local
     driver_opts:
       type: none
-      device: ./ocis_data
       o: bind
-    # Limite de espaço para teste (10GB)
-    # Para Docker Compose v2.18+ e Docker 23.0+: uncomment abaixo se suportado
-    # driver_opts:
-    #   size: 10g
+      device: ./ocis_data
 
 networks:
   nic_net:
