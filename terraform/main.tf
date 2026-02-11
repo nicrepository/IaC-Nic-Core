@@ -163,6 +163,12 @@ resource "proxmox_vm_qemu" "srv_wazuh" {
         discard = true
     }
 
+    disk {
+        type = "cloudinit"
+        slot = "ide0"
+        storage = "local-zfs"
+    }
+
 	# --- REDE ---
     network {
         id = 0
@@ -232,6 +238,12 @@ resource "proxmox_vm_qemu" "srv_apps" {
         storage = "local-zfs"
         iothread = true
         discard = true
+    }
+
+    disk {
+        type = "cloudinit"
+        slot = "ide0"
+        storage = "local-zfs"
     }
 
 	# --- GPU PASSTHROUGH ---
