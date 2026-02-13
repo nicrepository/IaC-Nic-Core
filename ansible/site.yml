@@ -30,6 +30,8 @@
 - name: Configurar servidor de aplicações
   hosts: apps
   become: true
+  vars_files:
+    - vars/secrets.yml
   roles:
     - gpu_nvidia
     - docker

@@ -36,3 +36,4 @@ Thumbs.db
 *.swp
 
 ansible/vars/secrets.yml
+ansible/wazuh-passwords.tar

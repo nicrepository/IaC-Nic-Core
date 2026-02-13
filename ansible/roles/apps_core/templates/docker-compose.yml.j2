@@ -1,4 +1,5 @@
-version: '3.8'
+{% set db_password_escaped = (db_password | default('MudeSuaSenha123')) | replace('$', '$$') %}
+{% set vault_password_escaped = (vault_password | default('MudeSuaSenha123')) | replace('$', '$$') %}
 
 # --- CONFIGURAÇÃO DE LOGS (Evita disco cheio) ---
 x-logging: &default-logging
@@ -29,7 +30,7 @@ services:
 
   # --- GESTÃO DE CONTAINERS ---
   portainer:
-    image: portainer/portainer-ce:2.19.4
+    image: portainer/portainer-ce:latest
     container_name: portainer
     restart: unless-stopped
     ports:
@@ -92,7 +93,7 @@ services:
       - DOMAIN=https://vault.nic-labs.com
       - SIGNUPS_ALLOWED=false
       - INVITATIONS_ALLOWED=false
-      - ADMIN_TOKEN={{ vault_password }}
+      - ADMIN_TOKEN={{ vault_password_escaped }}
       - WEBSOCKET_ENABLED=true
       - ROCKET_WORKERS=10
     volumes:
@@ -124,11 +125,11 @@ services:
       -c max_wal_senders=10
       -c hot_standby=on
     environment:
-      POSTGRES_USER: {{ db_user | default('nic_admin') }}
-      POSTGRES_PASSWORD: {{ db_password | default('MudeSuaSenha123') }}
+      POSTGRES_USER: "{{ db_user | default('nic_admin') }}"
+      POSTGRES_PASSWORD: "{{ db_password_escaped }}"
       POSTGRES_DB: nic_core_db
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - ./pg_data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
     networks:
       - nic_net
@@ -144,7 +145,7 @@ services:
     container_name: nocodb
     restart: unless-stopped
     environment:
-      NC_DB: "pg://nic_postgres:5432?u={{ db_user | default('nic_admin') }}&p={{ db_password | default('MudeSuaSenha123') }}&d=nic_core_db"
+      NC_DB: "pg://nic_postgres:5432?u={{ db_user | default('nic_admin') }}&p={{ db_password_escaped }}&d=nic_core_db"
     depends_on:
       - postgres
     volumes:
@@ -197,22 +198,24 @@ services:
   # --- CHAT (Mattermost Team Edition) ---
   mattermost:
     image: mattermost/mattermost-team-edition:latest
+    command: mattermost server
     container_name: mattermost
     restart: unless-stopped
     environment:
-      - MM_FILESETTINGS_DRIVERNAME=amazon_s3
-      - MM_FILESETTINGS_AMAZONS3_BUCKET={{ r2_bucket }}
-      - MM_FILESETTINGS_AMAZONS3_REGION={{ r2_region | default('auto') }}
-      - MM_FILESETTINGS_AMAZONS3_ACCESSKEYID={{ r2_access_key }}
-      - MM_FILESETTINGS_AMAZONS3_SECRETACCESSKEY={{ r2_secret_key }}
-      - MM_FILESETTINGS_AMAZONS3_ENDPOINT={{ r2_endpoint }}
-      - MM_FILESETTINGS_AMAZONS3_SSL=true
-      - MM_FILESETTINGS_AMAZONS3_SIGNV2=false
-      - MM_FILESETTINGS_AMAZONS3_S3DISABLESSL=false
-      - MM_FILESETTINGS_AMAZONS3_FORCEPATHSTYLE=true
-      - MM_FILESETTINGS_AMAZONS3_PATHPREFIX=/
+      - MM_FILESETTINGS_DRIVERNAME=local
+      #- MM_FILESETTINGS_DRIVERNAME=amazon_s3
+      #- MM_FILESETTINGS_AMAZONS3_BUCKET={{ r2_bucket }}
+      #- MM_FILESETTINGS_AMAZONS3_REGION={{ r2_region | default('auto') }}
+      #- MM_FILESETTINGS_AMAZONS3_ACCESSKEYID={{ r2_access_key }}
+      #- MM_FILESETTINGS_AMAZONS3_SECRETACCESSKEY={{ r2_secret_key }}
+      #- MM_FILESETTINGS_AMAZONS3_ENDPOINT={{ r2_endpoint }}
+      #- MM_FILESETTINGS_AMAZONS3_SSL=true
+      #- MM_FILESETTINGS_AMAZONS3_SIGNV2=false
+      #- MM_FILESETTINGS_AMAZONS3_S3DISABLESSL=false
+      #- MM_FILESETTINGS_AMAZONS3_FORCEPATHSTYLE=true
+      #- MM_FILESETTINGS_AMAZONS3_PATHPREFIX=/
       - MM_SQLSETTINGS_DRIVERNAME=postgres
-      - MM_SQLSETTINGS_DATASOURCE=postgres://{{ db_user | default('nic_admin') }}:{{ db_password | default('MudeSuaSenha123') }}@nic_postgres:5432/mattermost?sslmode=disable&connect_timeout=10
+      - MM_SQLSETTINGS_DATASOURCE=postgres://{{ db_user | default('nic_admin') }}:{{ db_password_escaped }}@nic_postgres:5432/mattermost?sslmode=disable&connect_timeout=10
     depends_on:
       - postgres
     networks:
@@ -233,7 +236,6 @@ services:
     environment:
       - OCIS_INSECURE=true
       - OCIS_URL=https://drive.nic-labs.com
-      - PROXY_HTTP_ADDR=0.0.0.0:9200
       - OCIS_LOG_LEVEL=info
       - STORAGE_USERS_DRIVER=ocis
     volumes:
@@ -246,6 +248,49 @@ services:
       resources:
         limits:
           memory: 512M
+
+# --- UNIFI NETWORK SERVER ---
+  unifi:
+    image: lscr.io/linuxserver/unifi-network-application:latest
+    container_name: nic_unifi
+    restart: unless-stopped
+    depends_on:
+      - unifi-db
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Sao_Paulo
+      - MEM_LIMIT=1024
+      - MEM_STARTUP=1024
+      - MONGO_HOST=unifi-db
+      - MONGO_PORT=27017
+      - MONGO_DBNAME=unifi
+      - MONGO_USER=unifi
+      - MONGO_PASS={{ unifi_db_password }}
+      - MONGO_AUTHSOURCE=admin
+    volumes:
+      - ./unifi_data:/config
+    ports:
+      - 8443:8443 # Dashboard
+      - 3478:3478/udp
+      - 10001:10001/udp
+      - 8080:8080
+    networks:
+      - nic_net
+
+  # --- UNIFI DATABASE (MongoDB) ---
+  unifi-db:
+    image: mongo:4.4
+    container_name: unifi-db
+    restart: unless-stopped
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD={{ unifi_db_password }}
+    volumes:
+      - ./unifi_db_data:/data/db
+      - ./init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    networks:
+      - nic_net
 
 volumes:
   portainer_data:

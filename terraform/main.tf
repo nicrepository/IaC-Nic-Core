@@ -54,7 +54,7 @@ resource "proxmox_vm_qemu" "srv_pfsense" {
     disk {
         type = "cdrom"
         slot = "ide2"
-        iso = "local:iso/netgate-installer-v1.1-RELEASE-amd64.iso"
+        iso = "local:iso/pfSense-CE-2.7.2-RELEASE-amd64.iso.gz"
     }
     
 

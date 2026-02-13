@@ -1,4 +1,16 @@
 ---
+
+- name: Forçar DNS para o Gateway pfSense
+  copy:
+    dest: /etc/resolv.conf
+    content: |
+      nameserver 10.10.10.1
+      search nic-labs.com
+      options edns0 trust-ad
+    owner: root
+    group: root
+    mode: '0644'
+
 - name: apt update
   apt:
     update_cache: yes
@@ -17,6 +29,7 @@
       - tar
       - unzip
       - software-properties-common
+      - gnupg2
     state: present
 
 - name: Configurar timezone para São Paulo

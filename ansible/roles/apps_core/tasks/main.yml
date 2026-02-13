@@ -7,6 +7,46 @@
     group: docker
     mode: '0755'
 
+- name: Criar diretório do volume OCIS
+  file:
+    path: /opt/nic-labs/core/ocis_data
+    state: directory
+    owner: nic-core
+    group: docker
+    mode: '0755'
+
+- name: Garantir diretórios de dados com permissões corretas (Fix Permission Denied)
+  file:
+    path: "/opt/nic-labs/core/{{ item.path }}"
+    state: directory
+    owner: "{{ item.uid }}"
+    group: "{{ item.gid }}"
+    mode: '0750'
+    recurse: yes
+  loop:
+    - { path: 'mattermost_data', uid: '2000', gid: '2000' }
+    - { path: 'mattermost_config', uid: '2000', gid: '2000' }
+    - { path: 'mattermost_logs', uid: '2000', gid: '2000' }
+    - { path: 'mattermost_plugins', uid: '2000', gid: '2000' }
+    - { path: 'mattermost_client_plugins', uid: '2000', gid: '2000' }
+    - { path: 'mattermost_bleve', uid: '2000', gid: '2000' }
+    - { path: 'ocis_data', uid: '1000', gid: '1000' }
+    - { path: 'ocis_config', uid: '1000', gid: '1000' }
+    - { path: 'pg_data', uid: '999', gid: '999' }
+    - { path: 'unifi_data', uid: '1000', gid: '1000'}
+    - { path: 'unifi_db_data', uid: '999', gid: '999'}
+
+# --- CRIAÇÃO DO SCRIPT DE INICIALIZAÇÃO DO MONGO ---
+- name: Criar script init-mongo.js com a senha correta
+  copy:
+    dest: /opt/nic-labs/core/init-mongo.js
+    mode: '0644'
+    owner: '999'
+    group: '999'
+    content: |
+      db.getSiblingDB("unifi").createUser({user: "unifi", pwd: "{{ unifi_db_password }}", roles: [{role: "dbOwner", db: "unifi"}]});
+      db.getSiblingDB("unifi_stat").createUser({user: "unifi", pwd: "{{ unifi_db_password }}", roles: [{role: "dbOwner", db: "unifi_stat"}]});
+
 - name: Gerar docker-compose.yml a partir do Template
   template:
     src: docker-compose.yml.j2
