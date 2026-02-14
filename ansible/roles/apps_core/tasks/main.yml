@@ -57,7 +57,7 @@
     - { path: 'crowdsec_config', uid: '1000', gid: '1000' }
 
     # Postgres
-    - { path: 'pg_data', uid: '999', gid: '999' }
+    - { path: 'pg_data', uid: '70', gid: '70' }
 
     # Portainer
     - { path: 'portainer_data', uid: '0', gid: '0' }
