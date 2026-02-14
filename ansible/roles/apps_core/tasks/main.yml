@@ -35,26 +35,42 @@
     group: "{{ item.gid }}"
     mode: '0750'
   loop:
-    # Mattermost (UID 2000)
+    # Mattermost
     - { path: 'mm_data', uid: '2000', gid: '2000' }
     - { path: 'mm_config', uid: '2000', gid: '2000' }
     - { path: 'mm_plugins', uid: '2000', gid: '2000' }
     - { path: 'mm_client_plugins', uid: '2000', gid: '2000' }
-    
-    # OCIS (UID 1000) - Bind Mount Específico
+
+    # OCIS
     - { path: 'ocis_data', uid: '1000', gid: '1000' }
     - { path: 'ocis_config', uid: '1000', gid: '1000' }
 
-    # UniFi (UID 1000)
+    # UniFi
     - { path: 'unifi_config', uid: '1000', gid: '1000'}
     - { path: 'unifi_db_data', uid: '999', gid: '999'} # Mongo
     
-    # Redis (UID 999)
+    # Redis
     - { path: 'redis_data', uid: '999', gid: '999' }
 
-    # Crowdsec (UID 1000)
+    # Crowdsec
     - { path: 'crowdsec_db', uid: '1000', gid: '1000' }
     - { path: 'crowdsec_config', uid: '1000', gid: '1000' }
+
+    # Postgres
+    - { path: 'pg_data', uid: '999', gid: '999' }
+
+    # Portainer
+    - { path: 'portainer_data', uid: '0', gid: '0' }
+
+    # Vaultwarden
+    - { path: 'vw_data', uid: '0', gid: '0' }
+
+    # NocoDB
+    - { path: 'nc_data', uid: '1000', gid: '1000' }
+
+    # AI
+    - { path: 'ollama_data', uid: '0', gid: '0' }
+    - { path: 'openwebui_data', uid: '1000', gid: '1000' }
 
 - name: Deploy do Script de Inicialização do Postgres (SQL)
   template:
