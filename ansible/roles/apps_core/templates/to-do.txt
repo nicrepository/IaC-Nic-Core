@@ -5,7 +5,7 @@ Certifique-se de que a task que copia o docker-compose use o módulo template:
 - name: Deploy Docker Compose com Jinja2
   template:
     src: docker-compose.yml.j2
-    dest: /opt/nic_infra/docker-compose.yml
+    dest: /opt/nic-labs/core/docker-compose.yml
     owner: root
     group: root
     mode: '0640'
@@ -23,14 +23,14 @@ portainer_password_hash: "$2y$05$L.yP4/..." # Cole o hash gerado acima
 3. Antes de subir o Docker Compose, o Ansible deve criar o arquivo que o container vai ler.
 - name: Criar diretório de segredos locais
   file:
-    path: /opt/nic_infra/secrets
+    path: /opt/nic-labs/core/secrets
     state: directory
     mode: '0700'
 
 - name: Criar arquivo de senha do Portainer
   copy:
     content: "{{ portainer_password_hash }}"
-    dest: /opt/nic_infra/secrets/portainer_pass
+    dest: /opt/nic-labs/core/secrets/portainer_pass
     mode: '0400' # Apenas root lê
 
 # --- NicVault (Vaultwarden)
@@ -38,7 +38,7 @@ portainer_password_hash: "$2y$05$L.yP4/..." # Cole o hash gerado acima
 - name: Criar arquivo com Token do Vaultwarden
   copy:
     content: "{{ vault_password_escaped }}"
-    dest: /opt/nic_infra/secrets/nicvault_admin_token
+    dest: /opt/nic-labs/core/secrets/nicvault_admin_token
     mode: '0400'
 
 2. Configuração do Cloudflare Tunnel (Ingress)
@@ -64,7 +64,7 @@ Ainda na tela de configuração do Hostname, vá em Additional application setti
 - name: Criar arquivo de senha Root do Postgres
   copy:
     content: "{{ db_password_escaped }}"
-    dest: /opt/nic_infra/secrets/postgres_root_pass
+    dest: /opt/nic-labs/core/secrets/postgres_root_pass
     mode: '0400'
 
 - name: Deploy do Script de Inicialização (SQL)
@@ -98,7 +98,7 @@ init-db.sql > init-db.sql.j2
 - name: Criar arquivo de senha do OCIS
   copy:
     content: "{{ ocis_admin_password }}" # Senha texto plano (OCIS faz o hash internamente na 1ª vez)
-    dest: /opt/nic_infra/secrets/ocis_pass
+    dest: /opt/nic-labs/core/secrets/ocis_pass
     mode: '0400'
     owner: 1000 # Importante: o container precisa ler isso
     group: 1000
