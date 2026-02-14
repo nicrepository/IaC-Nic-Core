@@ -1,19 +1,31 @@
 ---
-- name: Criar diretório base para Apps
+- name: Criar estrutura de diretórios base
   file:
-    path: /opt/nic-labs/core
+    path: "{{ item }}"
     state: directory
-    owner: nic-core
-    group: docker
+    owner: root
+    group: root
     mode: '0755'
+  loop:
+    - /opt/nic-labs/core
+    - /opt/nic-labs/core/secrets
+    - /opt/nic-labs/core/scripts
+    - /opt/nic-labs/core/config
+    - /opt/nic-labs/core/config/crowdsec
 
-- name: Criar diretório do volume OCIS
-  file:
-    path: /opt/nic-labs/core/ocis_data
-    state: directory
-    owner: nic-core
-    group: docker
-    mode: '0755'
+- name: Criar arquivos de segredos (Secrets)
+  copy:
+    content: "{{ item.content }}"
+    dest: "/opt/nic-labs/core/secrets/{{ item.filename }}"
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: '0400'
+  no_log: true
+  loop:
+    - { filename: 'portainer_pass', content: "{{ portainer_password_hash }}" }
+    - { filename: 'nicvault_admin_token', content: "{{ vault_password_escaped }}" }
+    - { filename: 'postgres_root_pass', content: "{{ db_password_escaped }}" }
+    - { filename: 'ocis_pass', content: "{{ ocis_admin_password }}", owner: '1000', group: '1000' } # OCIS user 1000 precisa ler
 
 - name: Garantir diretórios de dados com permissões corretas (Fix Permission Denied)
   file:
@@ -22,37 +34,58 @@
     owner: "{{ item.uid }}"
     group: "{{ item.gid }}"
     mode: '0750'
-    recurse: yes
   loop:
-    - { path: 'mattermost_data', uid: '2000', gid: '2000' }
-    - { path: 'mattermost_config', uid: '2000', gid: '2000' }
-    - { path: 'mattermost_logs', uid: '2000', gid: '2000' }
-    - { path: 'mattermost_plugins', uid: '2000', gid: '2000' }
-    - { path: 'mattermost_client_plugins', uid: '2000', gid: '2000' }
-    - { path: 'mattermost_bleve', uid: '2000', gid: '2000' }
+    # Mattermost (UID 2000)
+    - { path: 'mm_data', uid: '2000', gid: '2000' }
+    - { path: 'mm_config', uid: '2000', gid: '2000' }
+    - { path: 'mm_plugins', uid: '2000', gid: '2000' }
+    - { path: 'mm_client_plugins', uid: '2000', gid: '2000' }
+    
+    # OCIS (UID 1000) - Bind Mount Específico
     - { path: 'ocis_data', uid: '1000', gid: '1000' }
     - { path: 'ocis_config', uid: '1000', gid: '1000' }
-    - { path: 'pg_data', uid: '999', gid: '999' }
-    - { path: 'unifi_data', uid: '1000', gid: '1000'}
-    - { path: 'unifi_db_data', uid: '999', gid: '999'}
 
-# --- CRIAÇÃO DO SCRIPT DE INICIALIZAÇÃO DO MONGO ---
-- name: Criar script init-mongo.js com a senha correta
-  copy:
-    dest: /opt/nic-labs/core/init-mongo.js
+    # UniFi (UID 1000)
+    - { path: 'unifi_config', uid: '1000', gid: '1000'}
+    - { path: 'unifi_db_data', uid: '999', gid: '999'} # Mongo
+    
+    # Redis (UID 999)
+    - { path: 'redis_data', uid: '999', gid: '999' }
+
+    # Crowdsec (UID 1000)
+    - { path: 'crowdsec_db', uid: '1000', gid: '1000' }
+    - { path: 'crowdsec_config', uid: '1000', gid: '1000' }
+
+- name: Deploy do Script de Inicialização do Postgres (SQL)
+  template:
+    src: init-db.sql.j2
+    dest: /opt/nic-labs/core/init-db.sql
+    owner: root
+    group: root
     mode: '0644'
-    owner: '999'
-    group: '999'
-    content: |
-      db.getSiblingDB("unifi").createUser({user: "unifi", pwd: "{{ unifi_db_password }}", roles: [{role: "dbOwner", db: "unifi"}]});
-      db.getSiblingDB("unifi_stat").createUser({user: "unifi", pwd: "{{ unifi_db_password }}", roles: [{role: "dbOwner", db: "unifi_stat"}]});
+
+- name: Deploy do Script de Inicialização do MongoDB (JS)
+  template:
+    src: init-mongo.js.j2
+    dest: /opt/nic-labs/core/scripts/init-mongo.js
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Deploy da Configuração do CrowdSec (Acquis)
+  template:
+    src: acquis.yaml.j2
+    dest: /opt/nic-labs/core/config/crowdsec/acquis.yaml
+    owner: 1000
+    group: 1000
+    mode: '0644'
 
 - name: Gerar docker-compose.yml a partir do Template
   template:
     src: docker-compose.yml.j2
     dest: /opt/nic-labs/core/docker-compose.yml
-    owner: nic-core
-    group: docker
+    owner: root
+    group: root
     mode: '0640'
   notify: Restart Containers
 
@@ -60,3 +93,4 @@
   community.docker.docker_compose_v2:
     project_src: /opt/nic-labs/core
     state: present
+    pull: always
