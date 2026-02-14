@@ -1,0 +1,22 @@
+# --- Configuração de Escuta do Docker ---
+
+# Vaultwarden (Proteção de Senhas)
+source: docker
+container_name:
+ - nicvault
+labels:
+ type: vaultwarden
+
+# Postgres (Proteção de Banco)
+source: docker
+container_name:
+ - nic_postgres
+labels:
+ type: postgresql
+
+# SSH do Host (Proteção do Servidor Linux)
+# Isso lê o arquivo montado do host
+filenames:
+ - /var/log/auth.log
+labels:
+ type: syslog

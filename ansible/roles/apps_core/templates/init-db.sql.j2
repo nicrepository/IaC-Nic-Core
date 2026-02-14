@@ -1,0 +1,13 @@
+\set ON_ERROR_STOP on
+
+CREATE USER mmuser WITH PASSWORD '{{ mattermost_db_password }}';
+CREATE USER noco_user WITH PASSWORD '{{ nocodb_db_password }}';
+CREATE USER ocis_user WITH PASSWORD '{{ ocis_db_password }}';
+
+CREATE DATABASE mattermost OWNER mmuser ENCODING 'UTF8';
+CREATE DATABASE nocodb OWNER noco_user ENCODING 'UTF8';
+CREATE DATABASE ocis OWNER ocis_user ENCODING 'UTF8';
+
+GRANT ALL PRIVILEGES ON DATABASE mattermost TO mmuser;
+GRANT ALL PRIVILEGES ON DATABASE nocodb TO noco_user;
+GRANT ALL PRIVILEGES ON DATABASE ocis TO ocis_user;

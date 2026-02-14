@@ -1,0 +1,163 @@
+# --- Cloudflared ---
+Verificar o cloudflare_tunnel_token no secrets.yml
+
+Certifique-se de que a task que copia o docker-compose use o módulo template:
+- name: Deploy Docker Compose com Jinja2
+  template:
+    src: docker-compose.yml.j2
+    dest: /opt/nic_infra/docker-compose.yml
+    owner: root
+    group: root
+    mode: '0640'
+  notify: Reiniciar Containers
+
+
+# --- Portainer ---
+1. Gerar o Hash (No seu terminal de controle):
+    docker run --rm portainer/portainer-ce:latest --admin-password "SuaSenhaMuitoForteDoVault"
+
+2. Adicionar o hash gerado ao secrets.yml
+# secrets.yml
+portainer_password_hash: "$2y$05$L.yP4/..." # Cole o hash gerado acima
+
+3. Antes de subir o Docker Compose, o Ansible deve criar o arquivo que o container vai ler.
+- name: Criar diretório de segredos locais
+  file:
+    path: /opt/nic_infra/secrets
+    state: directory
+    mode: '0700'
+
+- name: Criar arquivo de senha do Portainer
+  copy:
+    content: "{{ portainer_password_hash }}"
+    dest: /opt/nic_infra/secrets/portainer_pass
+    mode: '0400' # Apenas root lê
+
+# --- NicVault (Vaultwarden)
+1. Criar arquivo com Token do Vaultwarden
+- name: Criar arquivo com Token do Vaultwarden
+  copy:
+    content: "{{ vault_password_escaped }}"
+    dest: /opt/nic_infra/secrets/nicvault_admin_token
+    mode: '0400'
+
+2. Configuração do Cloudflare Tunnel (Ingress)
+Garantir que o WebSocker funcione para para o cofre sincronizar instantaneamente entre dispositivos.
+
+Via Dashboard Zero Trust:
+    2.1 Acesse Zero Trust > Access > Tunnels.
+    2.2 Clique no seu túnel (nic_tunnel) e vá em Configure.
+    2.3 Aba Public Hostname.
+    2.4 Clique em Add a public hostname.
+    2.5 Preencha assim:
+        - Subdomain: vault (ex: vault.nic-labs.com)
+        - Path: Deixe em branco.
+        - Service Type: HTTP (Isso é crucial. Não use HTTPS aqui, pois o SSL morre na borda da Cloudflare e o tráfego interno é HTTP puro).
+        - URL: nicvault:80
+            - Nota: Aqui usamos o nome do container (nicvault) e a porta interna (80). Como estão na mesma rede Docker (nic_net), o cloudflared resolve esse nome magicamente.
+
+Configuração Adicional (Settings):
+Ainda na tela de configuração do Hostname, vá em Additional application settings > HTTP Settings e garanta que HTTP2 connection esteja habilitado (geralmente é o padrão).
+
+# --- Postgress ---
+1. Adicionar no ansible apps_core>tasks>main.yml
+- name: Criar arquivo de senha Root do Postgres
+  copy:
+    content: "{{ db_password_escaped }}"
+    dest: /opt/nic_infra/secrets/postgres_root_pass
+    mode: '0400'
+
+- name: Deploy do Script de Inicialização (SQL)
+  template:
+    src: init-db.sql.j2  # Note a extensão .j2
+    dest: /opt/nic_infra/init-db.sql
+    mode: '0640'
+
+2. init-db.sql como jinja:
+init-db.sql > init-db.sql.j2 
+
+# --- Mattermost ---
+1. Para executar só localmente defina em secrets.yml chamada use_s3_storage: false
+
+2. Garatindo permissoes Mattermost
+- name: Garantir permissões nos volumes do Mattermost
+  file:
+    path: /var/lib/docker/volumes/{{ item }}/_data
+    owner: 2000
+    group: 2000
+    recurse: yes
+  loop:
+    - mm_config
+    - mm_data
+    - mm_plugins
+    - mm_client_plugins
+  # Esta task pode falhar se os volumes não existirem, use 'ignore_errors' ou crie os volumes antes.
+
+# --- OwnCloud Infinite Scale - OCIS ---
+1. Adicionar no ansible apps_core>tasks>main.yml
+- name: Criar arquivo de senha do OCIS
+  copy:
+    content: "{{ ocis_admin_password }}" # Senha texto plano (OCIS faz o hash internamente na 1ª vez)
+    dest: /opt/nic_infra/secrets/ocis_pass
+    mode: '0400'
+    owner: 1000 # Importante: o container precisa ler isso
+    group: 1000
+
+- name: Garantir permissões nos volumes do OCIS
+  file:
+    path: /var/lib/docker/volumes/{{ item }}/_data
+    state: directory
+    owner: 1000
+    group: 1000
+    recurse: yes
+  loop:
+    - ocis_data
+    - ocis_config
+  # Nota: Se for a primeira vez e o volume não existir, crie a pasta manualmente no host 
+  # ou deixe o docker criar e rode um chown depois via handler.
+
+# --- Unifi Network Server ---
+1. Instruir o ansible a processar o template init-mongo.js.j2
+- name: Criar diretório para scripts de inicialização
+  file:
+    path: /opt/nic_infra/scripts
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Deploy do script de inicialização do MongoDB (UniFi)
+  template:
+    src: init-mongo.js.j2
+    dest: /opt/nic_infra/scripts/init-mongo.js
+    owner: root
+    group: root
+    mode: '0600' # Apenas root pode ler, pois contém a senha em texto plano dentro do container
+  notify: Reiniciar Containers # Se você tiver um handler para isso
+
+No seu roteador, configure um registro DNS chamado unifi apontando para o IP local do servidor Docker.
+Os APs buscam http://unifi:8080/inform por padrão. Se você tiver esse DNS, nunca precisará fazer adoção manual via SSH (set-inform).
+
+# --- NocoDB ---
+1. Adicionar no secrets.yml:
+    # Gere isso com: openssl rand -base64 32
+    nocodb_jwt_secret: "SuaChaveSuperSecretaBase64GeradaAleatoriamente=="
+    nocodb_db_password: "SenhaDoUsuarioNocoDB"
+
+# --- Ollama + WebUI ---
+1. Adicionar no secrets.yml:
+    # Gere com: openssl rand -base64 32
+    openwebui_secret_key: "t0pS3cr3tKey........."
+
+# -- CrowdSec WAF ---
+1. Gerar a Chave API
+    1.1. Suba apenas o serviço crowdsec primeiro.
+    1.2. Rode: docker exec nic_waf cscli bouncers add cloudflare-bouncer
+    1.3. Ele vai cuspir uma chave: cl83....
+    1.4. Copie essa chave para o seu secrets.yml na variável crowdsec_bouncer_api_key.
+    1.5. Agora suba o stack completo.
+
+2. Integração com Cloudflare
+Para o bouncer funcionar, o token da Cloudflare (cloudflare_waf_token) precisa ter as seguintes permissões no painel da Cloudflare:
+    - Zone > Zone > Read
+    - Zone > Firewall Services > Edit

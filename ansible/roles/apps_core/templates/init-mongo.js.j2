@@ -1,0 +1,28 @@
+// init-mongo.js
+db.getSiblingDB('admin').auth(
+    process.env.MONGO_INITDB_ROOT_USERNAME,
+    process.env.MONGO_INITDB_ROOT_PASSWORD
+);
+
+// Cria o banco de dados 'unifi'
+var db = db.getSiblingDB('unifi');
+
+// Cria o usuário que o Controller vai usar
+db.createUser({
+    user: "unifi",
+    pwd: "{{ unifi_db_password }}", // Será substituído pelo Jinja se processado ou mantenha fixo se usar env
+    roles: [
+        { role: "dbOwner", db: "unifi" },
+        { role: "dbOwner", db: "unifi_stat" }
+    ]
+});
+
+// Cria o banco de estatísticas (opcional, mas evita erros de log)
+db = db.getSiblingDB('unifi_stat');
+db.createUser({
+    user: "unifi",
+    pwd: "{{ unifi_db_password }}",
+    roles: [
+        { role: "dbOwner", db: "unifi_stat" }
+    ]
+});
