@@ -1,7 +1,4 @@
-{% set db_password_escaped = (db_password | default('MudeSuaSenha123')) | replace('$', '$$') %}
-{% set vault_password_escaped = (vault_password | default('MudeSuaSenha123')) | replace('$', '$$') %}
-
-# --- CONFIGURAÇÃO DE LOGS (Evita disco cheio) ---
+# --- CONFIGURAÇÃO GLOBAL DE LOGS (Evita disco cheio) ---
 x-logging: &default-logging
   driver: "json-file"
   options:
@@ -9,163 +6,272 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
-  # --- CONECTIVIDADE ZERO TRUST ---
+  # ---------------------------------------------------------------------------
+  # 1. CONECTIVIDADE & SEGURANÇA DE BORDA
+  # ---------------------------------------------------------------------------
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: nic_tunnel
-    restart: unless-stopped
+    restart: always
     command: tunnel --metrics 0.0.0.0:2000 run
+    user: "65532:65532"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     environment:
       - TUNNEL_TOKEN={{ cloudflare_tunnel_token }}
       - TUNNEL_TRANSPORT_PROTOCOL=quic
+      - TUNNEL_LOGLEVEL=info
+    sysctls:
+      - net.core.somaxconn=65535
+    networks:
+      - nic_net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:2000/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: { memory: 256M }
+    logging: *default-logging
+
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: nic_waf
+    restart: always
+    environment:
+      - GID=1000
+      - COLLECTIONS=crowdsecurity/linux crowdsecurity/vaultwarden crowdsecurity/postgresql crowdsecurity/http-cve
+      - ENROLL_KEY={{ crowdsec_enroll_key | default('') }}
+      - ENROLL_TAGS=nic-labs
+    volumes:
+      - crowdsec_db:/var/lib/crowdsec/data
+      - crowdsec_config:/etc/crowdsec
+      - /var/log/auth.log:/var/log/auth.log:ro
+      - /var/log/syslog:/var/log/syslog:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+    networks:
+      - nic_net
+    security_opt: [no-new-privileges:true]
+    logging: *default-logging
+
+  crowdsec-bouncer:
+    image: crowdsecurity/cloudflare-bouncer:latest
+    container_name: nic_waf_bouncer
+    restart: always
+    depends_on: [crowdsec]
+    environment:
+      - CF_API_TOKEN={{ cloudflare_waf_token }}
+      - CF_ZONE_ID={{ cloudflare_zone_id }}
+      - CROWDSEC_LAPI_URL=http://crowdsec:8080
+      - CROWDSEC_LAPI_KEY={{ crowdsec_bouncer_api_key }}
+      - UPDATE_FREQUENCY=10s
     networks:
       - nic_net
     logging: *default-logging
-    security_opt:
-      - no-new-privileges:true
+
+  # ---------------------------------------------------------------------------
+  # 2. PERFOMANCE & CACHE (REDIS)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: nic_redis
+    restart: always
+    command: redis-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - nic_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 512M
+    logging: *default-logging
 
-  # --- GESTÃO DE CONTAINERS ---
+  # ---------------------------------------------------------------------------
+  # 3. INFRAESTRUTURA & GESTÃO
+  # ---------------------------------------------------------------------------
   portainer:
     image: portainer/portainer-ce:latest
     container_name: portainer
     restart: unless-stopped
-    ports:
-      - "9443:9443"
+    command: --admin-password-file /run/secrets/portainer_admin_pass
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - portainer_data:/data
+      - ./secrets/portainer_pass:/run/secrets/portainer_admin_pass:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
     networks:
       - nic_net
+    security_opt: [no-new-privileges:true]
     logging: *default-logging
 
-  # --- PROXY REVERSO & SSL ---
-  nginx_proxy:
-    image: 'jc21/nginx-proxy-manager:2.11.0'
-    container_name: nginx_proxy
-    restart: unless-stopped
-    ports:
-      - '80:80'
-      - '81:81'
-      - '443:443'
-    environment:
-      - DISABLE_IPV6=true
-      - X_FRAME_OPTIONS="SAMEORIGIN"
-    volumes:
-      - npm_data:/data
-      - npm_letsencrypt:/etc/letsencrypt
-      - npm_logs:/data/logs
-    networks:
-      - nic_net
-    logging: *default-logging
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-
-  # --- WAF COMPORTAMENTAL (CrowdSec) ---
-  crowdsec:
-    image: crowdsecurity/crowdsec:v1.6.0
-    container_name: nic_waf
-    restart: unless-stopped
-    environment:
-      - COLLECTIONS=crowdsecurity/nginx-proxy-manager crowdsecurity/http-cve crowdsecurity/whitelist-good-actors crowdsecurity/vaultwarden
-      - GID=1000
-    volumes:
-      - crowdsec_db:/var/lib/crowdsec/data
-      - crowdsec_config:/etc/crowdsec
-      - npm_logs:/var/log/npm:ro
-    networks:
-      - nic_net
-    logging: *default-logging
-    security_opt:
-      - no-new-privileges:true
-
-  # --- GERENCIADOR DE SENHAS ---
-  nicvault:
-    image: vaultwarden/server:1.30.5-alpine
-    container_name: nicvault
-    restart: unless-stopped
-    environment:
-      - DOMAIN=https://vault.nic-labs.com
-      - SIGNUPS_ALLOWED=false
-      - INVITATIONS_ALLOWED=false
-      - ADMIN_TOKEN={{ vault_password_escaped }}
-      - WEBSOCKET_ENABLED=true
-      - ROCKET_WORKERS=10
-    volumes:
-      - vw_data:/data
-    networks:
-      - nic_net
-    logging: *default-logging
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-
-  # --- BANCO DE DADOS ---
   postgres:
     image: postgres:15.5-alpine
     container_name: nic_postgres
-    restart: unless-stopped
+    restart: always
     command: >
       postgres
-      -c shared_buffers=256MB
-      -c effective_cache_size=768MB
-      -c maintenance_work_mem=64MB
+      -c shared_buffers=1GB
+      -c effective_cache_size=3GB
+      -c maintenance_work_mem=256MB
       -c checkpoint_completion_target=0.9
       -c wal_buffers=16MB
       -c default_statistics_target=100
       -c random_page_cost=1.1
       -c effective_io_concurrency=200
-      -c wal_level=replica
-      -c max_wal_senders=10
-      -c hot_standby=on
+      -c work_mem=16MB
+      -c max_connections=300
     environment:
-      POSTGRES_USER: "{{ db_user | default('nic_admin') }}"
-      POSTGRES_PASSWORD: "{{ db_password_escaped }}"
-      POSTGRES_DB: nic_core_db
+      - POSTGRES_USER={{ db_user | default('nic_admin') }}
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_root_pass
+      - POSTGRES_DB=nic_core_db
     volumes:
-      - ./pg_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+      - ./secrets/postgres_root_pass:/run/secrets/postgres_root_pass:ro
     networks:
       - nic_net
-    logging: *default-logging
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ db_user | default('nic_admin') }} -d nic_core_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     deploy:
       resources:
-        limits:
-          memory: 1G
-
-  # --- PLATAFORMA DE DADOS ---
-  nocodb:
-    image: nocodb/nocodb:0.204.3
-    container_name: nocodb
-    restart: unless-stopped
-    environment:
-      NC_DB: "pg://nic_postgres:5432?u={{ db_user | default('nic_admin') }}&p={{ db_password_escaped }}&d=nic_core_db"
-    depends_on:
-      - postgres
-    volumes:
-      - nc_data:/usr/app/data
-    networks:
-      - nic_net
+        limits: { memory: 1G, cpus: '1.0' }
     logging: *default-logging
 
-  # --- INTELIGENCIA ARTIFICIAL (Ollama + GPU) ---
+  # ---------------------------------------------------------------------------
+  # 4. APLICAÇÕES CORE (Senhas, Arquivos, Chat)
+  # ---------------------------------------------------------------------------
+  nicvault:
+    image: vaultwarden/server:1.30.5-alpine
+    container_name: nicvault
+    restart: always
+    environment:
+      - DOMAIN=https://vault.nic-labs.com
+      - SIGNUPS_ALLOWED=false
+      - INVITATIONS_ALLOWED=false
+      - IP_HEADER=CF-Connecting-IP
+      - ADMIN_TOKEN_FILE=/run/secrets/admin_token
+      - WEBSOCKET_ENABLED=true
+    volumes:
+      - vw_data:/data
+      - ./secrets/nicvault_admin_token:/run/secrets/admin_token:ro
+    networks:
+      - nic_net
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [SETGID, SETUID]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/alive"]
+      interval: 60s
+      timeout: 10s
+    logging: *default-logging
+
+  mattermost:
+    image: mattermost/mattermost-team-edition:9.5.1
+    container_name: mattermost
+    restart: always
+    user: "${MM_UID:-2000}:${MM_GID:-2000}"
+    read_only: true
+    tmpfs: [/tmp, /mattermost/logs]
+    environment:
+      - MM_SERVICESETTINGS_SITEURL=https://chat.nic-labs.com
+      - MM_SERVICESETTINGS_LISTENADDRESS=:8065
+      - MM_SQLSETTINGS_DRIVERNAME=postgres
+      - MM_SQLSETTINGS_DATASOURCE=postgres://mmuser:{{ mattermost_db_password }}@nic_postgres:5432/mattermost?sslmode=disable&connect_timeout=10
+      - MM_FILESETTINGS_DRIVERNAME={{ 'amazon_s3' if use_s3_storage else 'local' }}
+      {% if use_s3_storage %}
+      - MM_FILESETTINGS_AMAZONS3_BUCKET={{ r2_bucket }}
+      - MM_FILESETTINGS_AMAZONS3_REGION=auto
+      - MM_FILESETTINGS_AMAZONS3_ACCESSKEYID={{ r2_access_key }}
+      - MM_FILESETTINGS_AMAZONS3_SECRETACCESSKEY={{ r2_secret_key }}
+      - MM_FILESETTINGS_AMAZONS3_ENDPOINT={{ r2_endpoint }}
+      - MM_FILESETTINGS_AMAZONS3_SSL=true
+      - MM_FILESETTINGS_AMAZONS3_PATHPREFIX=mattermost-media
+      {% endif %}
+      - MM_PLUGINSETTINGS_ENABLEUPLOADS=true
+      - MM_PLUGIN_CALLS_RTCD_UDP_PORT=8443 
+      - MM_PLUGIN_CALLS_ICE_SERVERS=[{"urls":["stun:stun.l.google.com:19302"]}]
+      - MM_REDISSETTINGS_ENABLE=true
+      - MM_REDISSETTINGS_DATASOURCE=redis:6379
+      - MM_SQLSETTINGS_MAXOPENCONNS=100
+      - MM_SQLSETTINGS_MAXIDLECONNS=20
+      - MM_SERVICESETTINGS_ENABLEGZIP=true
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - mm_config:/mattermost/config:rw
+      - mm_data:/mattermost/data:rw
+      - mm_plugins:/mattermost/plugins:rw
+      - mm_client_plugins:/mattermost/client/plugins:rw
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks:
+      - nic_net
+    deploy:
+      resources:
+        limits: { memory: 1.5G, cpus: '1.0' }
+    logging: *default-logging
+
+  ocis:
+    image: owncloud/ocis:5.0.0
+    container_name: nic_drive
+    restart: always
+    user: "1000:1000"
+    read_only: true
+    environment:
+      - OCIS_URL=https://drive.nic-labs.com
+      - OCIS_INSECURE=true
+      - PROXY_HTTP_SRC_SUBNETS=0.0.0.0/0
+      - OCIS_ADMIN_USER_ID=admin
+      - OCIS_ADMIN_PASSWORD_FILE=/run/secrets/ocis_admin_password
+      - STORAGE_USERS_DRIVER=ocis 
+      - OCIS_BASE_DATA_PATH=/var/lib/ocis
+    volumes:
+      - ocis_data:/var/lib/ocis
+      - ocis_config:/etc/ocis
+      - ./secrets/ocis_pass:/run/secrets/ocis_admin_password:ro
+      - /tmp/ocis-scratch:/tmp
+    networks:
+      - nic_net
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:9200/healthz"]
+      interval: 10s
+    deploy:
+      resources:
+        limits: { memory: 512M }
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # 5. FERRAMENTAS AVANÇADAS (AI, Dados, Wi-Fi)
+  # ---------------------------------------------------------------------------
   ollama:
     image: ollama/ollama:latest
     container_name: nic_ollama
-    restart: unless-stopped
+    restart: always
     tty: true
     environment:
+      - OLLAMA_HOST=0.0.0.0
       - OLLAMA_KEEP_ALIVE=24h
       - OLLAMA_NUM_PARALLEL=4
       - OLLAMA_MAX_LOADED_MODELS=1
-    ports:
-      - "11434:11434"
+      - OLLAMA_CTX_SIZE=8192
+      - OLLAMA_ORIGINS="http://nic_chat:8080,http://localhost:11434"
     volumes:
       - ollama_data:/root/.ollama
     networks:
@@ -175,150 +281,147 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: all
               capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
 
-  # --- INTERFACE DE CHAT ---
   openwebui:
     image: ghcr.io/open-webui/open-webui:main
     container_name: nic_chat
-    restart: unless-stopped
+    restart: always
     environment:
       - OLLAMA_BASE_URL=http://nic_ollama:11434
+      - WEBUI_SECRET_KEY={{ openwebui_secret_key }}
+      - ENABLE_SIGNUP=false
+      - ENABLE_LOGIN_FORM=true
+      - ENABLE_RAG_WEB_SEARCH=true 
+      - RAG_EMBEDDING_ENGINE=ollama 
+      - RAG_OLLAMA_BASE_URL=http://nic_ollama:11434
     volumes:
       - openwebui_data:/app/backend/data
-    ports:
-      - "3000:8080"
     depends_on:
-      - ollama
+      ollama: { condition: service_healthy }
     networks:
       - nic_net
     logging: *default-logging
 
-  # --- CHAT (Mattermost Team Edition) ---
-  mattermost:
-    image: mattermost/mattermost-team-edition:latest
-    command: mattermost server
-    container_name: mattermost
-    restart: unless-stopped
+  nocodb:
+    image: nocodb/nocodb:0.255.0
+    container_name: nocodb
+    restart: always
     environment:
-      - MM_FILESETTINGS_DRIVERNAME=local
-      #- MM_FILESETTINGS_DRIVERNAME=amazon_s3
-      #- MM_FILESETTINGS_AMAZONS3_BUCKET={{ r2_bucket }}
-      #- MM_FILESETTINGS_AMAZONS3_REGION={{ r2_region | default('auto') }}
-      #- MM_FILESETTINGS_AMAZONS3_ACCESSKEYID={{ r2_access_key }}
-      #- MM_FILESETTINGS_AMAZONS3_SECRETACCESSKEY={{ r2_secret_key }}
-      #- MM_FILESETTINGS_AMAZONS3_ENDPOINT={{ r2_endpoint }}
-      #- MM_FILESETTINGS_AMAZONS3_SSL=true
-      #- MM_FILESETTINGS_AMAZONS3_SIGNV2=false
-      #- MM_FILESETTINGS_AMAZONS3_S3DISABLESSL=false
-      #- MM_FILESETTINGS_AMAZONS3_FORCEPATHSTYLE=true
-      #- MM_FILESETTINGS_AMAZONS3_PATHPREFIX=/
-      - MM_SQLSETTINGS_DRIVERNAME=postgres
-      - MM_SQLSETTINGS_DATASOURCE=postgres://{{ db_user | default('nic_admin') }}:{{ db_password_escaped }}@nic_postgres:5432/mattermost?sslmode=disable&connect_timeout=10
-    depends_on:
-      - postgres
-    networks:
-      - nic_net
-    logging: *default-logging
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 1G
-    # profiles: ["failover"] <--- Removido para subir em PRODUÇÃO (Master)
-
-  # --- ARQUIVOS (OwnCloud Infinite Scale - OCIS) ---
-  ocis:
-    image: owncloud/ocis:latest
-    container_name: nic_drive
-    restart: unless-stopped
-    environment:
-      - OCIS_INSECURE=true
-      - OCIS_URL=https://drive.nic-labs.com
-      - OCIS_LOG_LEVEL=info
-      - STORAGE_USERS_DRIVER=ocis
+      - NC_DB=pg://nic_postgres:5432?u=noco_user&p={{ nocodb_db_password }}&d=nocodb
+      - NC_AUTH_JWT_SECRET={{ nocodb_jwt_secret }}
+      - NC_PUBLIC_URL=https://noco.nic-labs.com
+      - NODE_ENV=production
+      - NC_DISABLE_TELEMETRY=true
     volumes:
-      - ocis_data:/var/lib/ocis
-      - ocis_config:/etc/ocis
+      - nc_data:/usr/app/data
+    depends_on:
+      postgres: { condition: service_healthy }
     networks:
       - nic_net
-    logging: *default-logging
     deploy:
       resources:
-        limits:
-          memory: 512M
+        limits: { memory: 1G }
+    logging: *default-logging
 
-# --- UNIFI NETWORK SERVER ---
   unifi:
     image: lscr.io/linuxserver/unifi-network-application:latest
     container_name: nic_unifi
-    restart: unless-stopped
-    depends_on:
-      - unifi-db
+    restart: always
     environment:
       - PUID=1000
       - PGID=1000
       - TZ=America/Sao_Paulo
-      - MEM_LIMIT=1024
-      - MEM_STARTUP=1024
       - MONGO_HOST=unifi-db
       - MONGO_PORT=27017
       - MONGO_DBNAME=unifi
       - MONGO_USER=unifi
       - MONGO_PASS={{ unifi_db_password }}
-      - MONGO_AUTHSOURCE=admin
+      - MONGO_AUTHSOURCE=unifi
+      - MEM_LIMIT=2048
+      - MEM_STARTUP=1536
+      - MEM_MAX=1536
+    depends_on:
+      unifi-db: { condition: service_healthy }
     volumes:
-      - ./unifi_data:/config
+      - unifi_config:/config
     ports:
-      - 8443:8443 # Dashboard
-      - 3478:3478/udp
-      - 10001:10001/udp
-      - 8080:8080
+      - "8080:8080"
+      - "3478:3478/udp"
+      - "10001:10001/udp"
     networks:
       - nic_net
+    deploy:
+      resources:
+        limits: { memory: 1.5G }
+    logging: *default-logging
 
-  # --- UNIFI DATABASE (MongoDB) ---
   unifi-db:
     image: mongo:4.4
     container_name: unifi-db
-    restart: unless-stopped
+    restart: always
+    command: mongod --auth --bind_ip_all
     environment:
       - MONGO_INITDB_ROOT_USERNAME=root
-      - MONGO_INITDB_ROOT_PASSWORD={{ unifi_db_password }}
+      - MONGO_INITDB_ROOT_PASSWORD={{ unifi_db_root_password }}
+      - MONGO_PASS={{ unifi_db_password }} 
     volumes:
-      - ./unifi_db_data:/data/db
-      - ./init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+      - unifi_db_data:/data/db
+      - ./scripts/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
     networks:
       - nic_net
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongo localhost:27017/test --quiet
+      interval: 10s
+    logging: *default-logging
 
+# ---------------------------------------------------------------------------
+# VOLUMES E REDES
+# ---------------------------------------------------------------------------
 volumes:
+  # Portainer
   portainer_data:
-  npm_data:
-  npm_letsencrypt:
-  npm_logs:
+
+  # Vaultwarden
   vw_data:
+
+  # Postgres & Dados
   pg_data:
   nc_data:
-  ollama_data:
-  openwebui_data:
-  crowdsec_db:
-  crowdsec_config:
+
+  # Mattermost
+  mm_config:
+  mm_data:
+  mm_plugins:
+  mm_client_plugins:
+
+  # OCIS (OwnCloud)
   ocis_config:
-  mattermost_config:
-  mattermost_data:
-  mattermost_logs:
-  mattermost_plugins:
-  mattermost_client_plugins:
-  mattermost_bleve:
-  
-  # Volume limitado do OCIS
   ocis_data:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ./ocis_data
+      device: /opt/nic-labs/core/ocis_data
+
+  # UniFi
+  unifi_config:
+  unifi_db_data:
+
+  # AI
+  ollama_data:
+  openwebui_data:
+
+  # Segurança (CrowdSec)
+  crowdsec_db:
+  crowdsec_config:
+
+  # Redis
+  redis_data:
 
 networks:
   nic_net:
