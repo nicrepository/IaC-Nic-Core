@@ -70,7 +70,7 @@ Ainda na tela de configuração do Hostname, vá em Additional application setti
 - name: Deploy do Script de Inicialização (SQL)
   template:
     src: init-db.sql.j2  # Note a extensão .j2
-    dest: /opt/nic_infra/init-db.sql
+    dest: /opt/nic-labs/core/init-db.sql
     mode: '0640'
 
 2. init-db.sql como jinja:
@@ -120,7 +120,7 @@ init-db.sql > init-db.sql.j2
 1. Instruir o ansible a processar o template init-mongo.js.j2
 - name: Criar diretório para scripts de inicialização
   file:
-    path: /opt/nic_infra/scripts
+    path: /opt/nic-labs/core/scripts
     state: directory
     owner: root
     group: root
@@ -129,7 +129,7 @@ init-db.sql > init-db.sql.j2
 - name: Deploy do script de inicialização do MongoDB (UniFi)
   template:
     src: init-mongo.js.j2
-    dest: /opt/nic_infra/scripts/init-mongo.js
+    dest: /opt/nic-labs/core/scripts/init-mongo.js
     owner: root
     group: root
     mode: '0600' # Apenas root pode ler, pois contém a senha em texto plano dentro do container
