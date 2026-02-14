@@ -383,24 +383,74 @@ services:
 # VOLUMES E REDES
 # ---------------------------------------------------------------------------
 volumes:
-  # Portainer
+  # --- Portainer ---
   portainer_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nic-labs/core/portainer_data
 
-  # Vaultwarden
+  # --- Vaultwarden ---
   vw_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nic-labs/core/vw_data
 
-  # Postgres & Dados
+  # --- Postgres & Dados ---
   pg_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nic-labs/core/pg_data
+  
   nc_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nic-labs/core/nc_data
 
-  # Mattermost
+  # --- Mattermost ---
   mm_config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nic-labs/core/mm_config
+  
   mm_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nic-labs/core/mm_data
+  
   mm_plugins:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nic-labs/core/mm_plugins
+  
   mm_client_plugins:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nic-labs/core/mm_client_plugins
 
-  # OCIS (OwnCloud)
+  # --- OCIS (OwnCloud) ---
   ocis_config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nic-labs/core/ocis_config
+  
   ocis_data:
     driver: local
     driver_opts:
@@ -408,20 +458,58 @@ volumes:
       o: bind
       device: /opt/nic-labs/core/ocis_data
 
-  # UniFi
+  # --- UniFi ---
   unifi_config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nic-labs/core/unifi_config
+  
   unifi_db_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nic-labs/core/unifi_db_data
 
-  # AI
+  # --- AI (Ollama + WebUI) ---
   ollama_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nic-labs/core/ollama_data
+  
   openwebui_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nic-labs/core/openwebui_data
 
-  # Segurança (CrowdSec)
+  # --- Segurança (CrowdSec) ---
   crowdsec_db:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nic-labs/core/crowdsec_db
+  
   crowdsec_config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nic-labs/core/crowdsec_config
 
-  # Redis
+  # --- Redis ---
   redis_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nic-labs/core/redis_data
 
 networks:
   nic_net:
