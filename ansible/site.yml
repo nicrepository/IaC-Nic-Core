@@ -36,14 +36,18 @@
     - gpu_nvidia
     - docker
     - apps_core
-  tasks: 
-    - name: Liberar portas de apps no Firewall
+  tasks:
+    - name: Liberar portas TCP do UniFi (Inform/Management)
+      ufw:
+        rule: allow
+        port: '8080'
+        proto: tcp
+
+    - name: Liberar portas UDP do UniFi (STUN/Discovery)
       ufw:
         rule: allow
         port: "{{ item }}"
-        proto: tcp
+        proto: udp
       loop:
-        - '80'
-        - '443'
-        - '81'
-        - '3000'
+        - '3478'  # STUN
+        - '10001' # Discovery
