@@ -94,7 +94,14 @@ init-db.sql > init-db.sql.j2
   # Esta task pode falhar se os volumes não existirem, use 'ignore_errors' ou crie os volumes antes.
 
 # --- OwnCloud Infinite Scale - OCIS ---
-1. Adicionar no ansible apps_core>tasks>main.yml
+1. Adicionar 4 novas variaveis em secrets.yml
+
+  ocis_jwt_secret: "ColeSuaChaveGeradaAqui..."
+  ocis_machine_auth_api_key: "ColeOutraChaveGeradaAqui..."
+  ocis_system_user_api_key: "ColeMaisUmaChaveAqui..."
+  ocis_transfer_secret: "ColeAUltimaChaveAqui..."
+
+2. Adicionar no ansible apps_core>tasks>main.yml
 - name: Criar arquivo de senha do OCIS
   copy:
     content: "{{ ocis_admin_password }}" # Senha texto plano (OCIS faz o hash internamente na 1ª vez)
@@ -161,3 +168,4 @@ Os APs buscam http://unifi:8080/inform por padrão. Se você tiver esse DNS, nun
 Para o bouncer funcionar, o token da Cloudflare (cloudflare_waf_token) precisa ter as seguintes permissões no painel da Cloudflare:
     - Zone > Zone > Read
     - Zone > Firewall Services > Edit
+
