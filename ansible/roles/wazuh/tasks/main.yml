@@ -55,6 +55,23 @@
     regexp: '^deb'
     replace: '#deb'
 
+- name: Configurar Senha de Registro de Agentes (authd.pass)
+  copy:
+    content: "{{ wazuh_registration_password }}"
+    dest: /var/ossec/etc/authd.pass
+    owner: root
+    group: wazuh
+    mode: '0640'
+  notify: Reiniciar Manager
+
+- name: Criar Cron Job para limpar logs antigos do Wazuh (Archives)
+  cron:
+    name: "Limpar Wazuh Archives mais antigos que 7 dias"
+    minute: "0"
+    hour: "0"
+    job: "find /var/ossec/logs/archives/ -type f -mtime +7 -delete"
+    user: root
+
 - name: Configurar Wazuh Manager (ossec.conf)
   template:
     src: ossec.conf.j2

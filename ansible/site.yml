@@ -13,6 +13,8 @@
 - name: Configurar Wazuh SIEM
   hosts: siem
   become: true
+  vars_files:
+    - vars/secrets.yml
   roles:
     - wazuh
   tasks:

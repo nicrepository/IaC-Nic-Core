@@ -5,16 +5,23 @@
 # echo 'hw.vtnet.mq_disable=0' >> /boot/loader.conf.local
 # echo 'hw.vtnet.max_virtqueues=4' >> /boot/loader.conf.local
 
-resource "proxmox_vm_qemu" "srv_pfsense" {
-    name = "srv-pfsense-01"
-    target_node = "pve-niclabs"
+resource "proxmox_vm_qemu" "srv_opnsense" {
+    name = "srv-opnsense-01"
+    target_node = "nic-labs"
     vmid = 100
-	description = "Firewall Principal - Suricata Enabled"
+	description = "Firewall Principal Nic-Labs (OPNsense)"
 
 	# --- SISTEMA ---
-    agent   = 0
+    agent = 0
     os_type = "other"
-	bios = "seabios"
+	bios = "ovmf"
+    machine = "q35"
+    tablet = false
+
+    efidisk {
+        storage = "local-zfs"
+        efitype    = "4m"
+    }
 
 	# --- BOOT ---
 	start_at_node_boot = true
@@ -54,55 +61,60 @@ resource "proxmox_vm_qemu" "srv_pfsense" {
     disk {
         type = "cdrom"
         slot = "ide2"
-        iso = "local:iso/pfSense-CE-2.7.2-RELEASE-amd64.iso.gz"
+        iso = "local:iso/OPNsense-26.1.2-dvd-amd64.iso"
     }
     
+    # --- VGA ---
+    vga {
+        type = "std"
+    }
 
     # --- REDE DE ALTA PERFORMANCE (Multiqueue Ativo) ---
-
-    # WAN VIVO
     network {
-        id = 0
-        model = "virtio"
-        bridge = "vmbr1"
-        firewall = false
-		queues = 4
-    }
-
-    # WAN VALENET
-    network {
-        id = 1
-        model = "virtio"
-        bridge = "vmbr2"
-        firewall = false
-		queues = 4
-    }
-
-    # LAN TRUNK
-    network {
-        id = 2
-        model = "virtio"
-        bridge = "vmbr3"
-        firewall = false
-		queues = 4
-    }
-
-    # LAN LAB/VLAN
-    network {
-        id = 3
-        model = "virtio"
-        bridge = "vmbr4"
-        firewall = false
-		queues = 4
-    }
-
-    # LAN GERENCIA
-    network {
-        id       = 4
+        id       = 0
         model    = "virtio"
         bridge   = "vmbr0"
         firewall = false
         queues   = 4
+    }
+
+    # --- REDE: PCI PASSTHROUGH VIA RESOURCE MAPPING ---
+    pcis {
+        # Porta 1 - WAN Vivo
+        pci0 {
+            mapping {
+                mapping_id = "nic-wan-vivo"
+                pcie       = false
+                rombar     = false
+            }
+        }
+        
+        # Porta 2 - WAN Valenet
+        pci1 {
+            mapping {
+                mapping_id = "nic-wan-valenet"
+                pcie       = false
+                rombar     = false
+            }
+        }
+
+        # Porta 3 - LAN Trunk (VLANs)
+        pci2 {
+            mapping {
+                mapping_id = "nic-lan-trunk"
+                pcie       = false
+                rombar     = false
+            }
+        }
+
+        # Porta 4 - LAN Lab / Extra
+        pci3 {
+            mapping {
+                mapping_id = "nic-lan-lab"
+                pcie       = false
+                rombar     = false
+            }
+        }
     }
 }
 
@@ -113,7 +125,7 @@ resource "proxmox_vm_qemu" "srv_pfsense" {
 
 resource "proxmox_vm_qemu" "srv_wazuh" {
     name = "srv-wazuh-01"
-    target_node = "pve-niclabs"
+    target_node = "nic-labs"
     vmid = 105
 	description = "SIEM & XDR - OpenSearch Database"
 
@@ -194,7 +206,7 @@ resource "proxmox_vm_qemu" "srv_wazuh" {
 
 resource "proxmox_vm_qemu" "srv_apps" {
     name = "srv-apps-01"
-    target_node = "pve-niclabs"
+    target_node = "nic-labs"
     vmid = 106
 	description = "App server"
 
